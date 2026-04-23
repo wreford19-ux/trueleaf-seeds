@@ -14,10 +14,14 @@ const RAW = [
 const INIT = RAW.map((r,i) => ({id:i+1, name:r[0], category:r[1], cost:25, price:45, stock:true, image:""}));
 const CATS = ["All", ...Array.from(new Set(INIT.map(p => p.category))).sort()];
 const catStyle = {
-  Vegetable:{bg:"#e8f5ee",color:"#2d6a3f",icon:"🥦"}, Flower:{bg:"#fdf0f8",color:"#8b3a72",icon:"🌸"},
-  Herb:{bg:"#fdf8e8",color:"#7a5c00",icon:"🌿"}, Tree:{bg:"#eef5e8",color:"#2d4a1e",icon:"🌳"},
-  Microgreen:{bg:"#e8f8f8",color:"#0a6060",icon:"🌱"}, Sprouts:{bg:"#e8eef8",color:"#1a3a7a",icon:"🫘"},
-  "Crop Cover":{bg:"#f5efe8",color:"#6b3a00",icon:"🌾"}, Lawn:{bg:"#eef5e0",color:"#3a6000",icon:"🍀"},
+  Vegetable:{bg:"#e8f5ee",color:"#2d6a3f",icon:"🥦",img:"https://trueleafseeds.co.za/wp-content/uploads/2026/03/Trueleaf-Seeds.-47.png"},
+  Flower:{bg:"#fdf0f8",color:"#8b3a72",icon:"🌸",img:"https://trueleafseeds.co.za/wp-content/uploads/2026/03/Seeds-6.jpeg"},
+  Herb:{bg:"#fdf8e8",color:"#7a5c00",icon:"🌿",img:"https://trueleafseeds.co.za/wp-content/uploads/2026/03/Seeds-3-e1774273964473.jpeg"},
+  Tree:{bg:"#eef5e8",color:"#2d4a1e",icon:"🌳",img:"https://trueleafseeds.co.za/wp-content/uploads/2026/03/Trueleaf-Seeds.-39.png"},
+  Microgreen:{bg:"#e8f8f8",color:"#0a6060",icon:"🌱",img:"https://trueleafseeds.co.za/wp-content/uploads/2026/03/Seeds-3-e1774273964473.jpeg"},
+  Sprouts:{bg:"#e8eef8",color:"#1a3a7a",icon:"🫘",img:"https://trueleafseeds.co.za/wp-content/uploads/2026/03/Seeds-3-e1774273964473.jpeg"},
+  "Crop Cover":{bg:"#f5efe8",color:"#6b3a00",icon:"🌾",img:"https://trueleafseeds.co.za/wp-content/uploads/2026/03/Trueleaf-Seeds.-47.png"},
+  Lawn:{bg:"#eef5e0",color:"#3a6000",icon:"🍀",img:"https://trueleafseeds.co.za/wp-content/uploads/2026/03/Trueleaf-Seeds.-47.png"},
 };
 const C = {
   darkGreen:"#2d4a1e", midGreen:"#3d6b28", parchment:"#f5edd8", parchmentDark:"#e8d5a3",
@@ -146,8 +150,14 @@ export default function App() {
               const cs = catStyle[p.category] || {bg:"#f0f0f0", color:"#555", icon:"🌿"};
               return (
                 <div key={p.id} style={{background:"#fff", borderRadius:10, border:"1px solid " + C.border, overflow:"hidden", display:"flex", flexDirection:"column"}}>
-                  <div style={{width:"100%", height:110, background:cs.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0}}>
-                    {p.image ? <img src={p.image} alt={p.name} style={{width:"100%", height:"100%", objectFit:"cover"}} /> : <span style={{fontSize:36}}>{cs.icon}</span>}
+                  <div style={{width:"100%", height:130, background:cs.bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, overflow:"hidden", position:"relative"}}>
+                    <img
+                      src={p.image || cs.img}
+                      alt={p.name}
+                      style={{width:"100%", height:"100%", objectFit:"cover"}}
+                      onError={e => { e.target.style.display="none"; e.target.nextSibling.style.display="flex"; }}
+                    />
+                    <span style={{fontSize:36, display:"none", position:"absolute"}}>{cs.icon}</span>
                   </div>
                   <div style={{padding:"10px 12px 12px", flex:1, display:"flex", flexDirection:"column"}}>
                     <p style={{margin:"0 0 5px", fontWeight:700, fontSize:13, color:C.text, lineHeight:1.3}}>{p.name}</p>
