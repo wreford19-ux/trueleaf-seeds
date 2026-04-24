@@ -6,6 +6,8 @@ const EMAIL = "wreford19@gmail.com";
 const PHONE = "+27 83 230 9883";
 const LOGO = "https://i.ibb.co/Qj1wGkfJ/Trueleaf-Seeds-Logo.jpg";
 const ADMIN_PW = "Wreford99#";
+const PUDO_FEE = 50;
+const PACKAGING_FEE = 15;
 
 const IMGS = {
   "Alyssum Carpet White":"https://i.ibb.co/Rrk5t2T/Alyssum-White.jpg",
