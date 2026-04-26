@@ -345,26 +345,51 @@ export default function App() {
     showToast(p.name+" added to cart!");
   };
 
-  const cartTotal = cart.reduce((s,x)=>s+x.price*x.qty,0);
+  const seedsTotal = cart.reduce((s,x)=>s+x.price*x.qty,0);
+  const cartTotal = cart.length>0 ? seedsTotal+PUDO_FEE+PACKAGING_FEE : 0;
   const cartCount = cart.reduce((s,x)=>s+x.qty,0);
   const closeCart = ()=>{setCartOpen(false);setStep(0);};
 
-  const waMsg = encodeURIComponent(
-    "Hi Trueleaf! I have just placed an order:\n\n"+
-    cart.map(x=>"- "+x.qty+"x "+x.name+" @ R"+x.price+" = R"+(x.price*x.qty).toFixed(2)).join("\n")+
-    "\n\nTotal: R"+cartTotal.toFixed(2)+
-    "\n\nName: "+cust.name+"\nPhone: "+cust.phone+"\nEmail: "+cust.email+
-    "\nAddress: "+cust.street+", "+cust.suburb+", "+cust.city+", "+cust.province+" "+cust.postal+
-    "\n\nDelivery: Pudo Locker"
-  );
+  const sendWhatsApp = (order) => {
+    const msg = encodeURIComponent(
+      "🌱 NEW ORDER - Trueleaf Seeds\n"+
+      "================================\n"+
+      "Order ID: "+order.id+"\n"+
+      "Date: "+order.date+"\n\n"+
+      "CUSTOMER:\n"+
+      "Name: "+order.customer.name+"\n"+
+      "Phone: "+order.customer.phone+"\n"+
+      "Email: "+order.customer.email+"\n\n"+
+      "DELIVERY ADDRESS:\n"+
+      order.customer.street+"\n"+
+      order.customer.suburb+"\n"+
+      order.customer.city+"\n"+
+      order.customer.province+" "+order.customer.postal+"\n\n"+
+      "ORDER ITEMS:\n"+
+      order.items.map(x=>"- "+x.qty+"x "+x.name+" @ R"+x.price+" = R"+(x.price*x.qty).toFixed(2)).join("\n")+"\n\n"+
+      "Seeds subtotal: R"+order.seedsTotal.toFixed(2)+"\n"+
+      "Pudo delivery: R"+PUDO_FEE+".00\n"+
+      "Packaging: R"+PACKAGING_FEE+".00\n"+
+      "================================\n"+
+      "TOTAL PAID: R"+order.total.toFixed(2)+"\n"+
+      "================================\n"+
+      "Delivery: Pudo Locker"
+    );
+    // Send silently using fetch to WA API - falls back to window.open
+    try {
+      fetch("https://api.whatsapp.com/send?phone="+WA+"&text="+msg, {mode:"no-cors"});
+    } catch{}
+    // Also open as backup to ensure delivery
+    setTimeout(()=>{ window.open("https://wa.me/"+WA+"?text="+msg,"_blank"); },1500);
+  };
 
   const handlePay = async()=>{
-    // Save order before payment
     const newOrder = {
       id:"ORD-"+Date.now(),
       date:new Date().toLocaleString("en-ZA"),
       customer:{...cust},
       items:cart.map(x=>({name:x.name,qty:x.qty,price:x.price,image:x.image})),
+      seedsTotal,
       total:cartTotal,
       status:"Pending",
       pudoRef:"",
@@ -381,7 +406,7 @@ export default function App() {
       });
       const data = await res.json();
       if(data.redirectUrl){
-        window.open("https://wa.me/"+WA+"?text="+waMsg,"_blank");
+        sendWhatsApp(newOrder);
         window.location.href = data.redirectUrl;
       } else { setPayError("Payment could not be created. Please try again."); }
     } catch { setPayError("Something went wrong. Please try again."); }
@@ -727,7 +752,16 @@ export default function App() {
                       <span style={{minWidth:60,textAlign:"right",fontWeight:700,color:C.darkGreen,fontSize:13}}>R{(x.price*x.qty).toFixed(2)}</span>
                     </div>
                   ))}
-                  <div style={{display:"flex",justifyContent:"space-between",padding:"10px 0 0",fontWeight:700,fontSize:15}}>
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0 0",fontSize:13,color:C.textMid}}>
+                    <span>Seeds subtotal</span><span>R{seedsTotal.toFixed(2)}</span>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"4px 0",fontSize:13,color:C.textMid}}>
+                    <span>📦 Pudo delivery</span><span>R{PUDO_FEE}.00</span>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"4px 0 8px",fontSize:13,color:C.textMid,borderBottom:"1px solid "+C.border}}>
+                    <span>🛡️ Packaging</span><span>R{PACKAGING_FEE}.00</span>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",padding:"8px 0 0",fontWeight:700,fontSize:15}}>
                     <span>Total</span><span style={{color:C.darkGreen}}>R{cartTotal.toFixed(2)}</span>
                   </div>
                   <div style={{...pudoNote,marginTop:10}}>📦 Delivery via Pudo Locker — collect from a locker near you.</div>
@@ -771,7 +805,18 @@ export default function App() {
                     <span>{x.qty}× {x.name}</span><span style={{fontWeight:600}}>R{(x.price*x.qty).toFixed(2)}</span>
                   </div>
                 ))}
-                <div style={{borderTop:"1px solid "+C.border,marginTop:6,paddingTop:6,display:"flex",justifyContent:"space-between",fontWeight:700,fontSize:14}}>
+                <div style={{borderTop:"1px solid "+C.border,marginTop:6,paddingTop:6}}>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:13,color:C.textMid,padding:"2px 0"}}>
+                    <span>Seeds subtotal</span><span>R{seedsTotal.toFixed(2)}</span>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:13,color:C.textMid,padding:"2px 0"}}>
+                    <span>📦 Pudo delivery</span><span>R{PUDO_FEE}.00</span>
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:13,color:C.textMid,padding:"2px 0"}}>
+                    <span>🛡️ Packaging</span><span>R{PACKAGING_FEE}.00</span>
+                  </div>
+                </div>
+                <div style={{borderTop:"1px solid "+C.border,marginTop:6,paddingTop:6,display:"flex",justifyContent:"space-between",fontWeight:700,fontSize:15}}>
                   <span>Total</span><span style={{color:C.darkGreen}}>R{cartTotal.toFixed(2)}</span>
                 </div>
               </div>
