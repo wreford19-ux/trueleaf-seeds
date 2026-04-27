@@ -408,7 +408,7 @@ export default function App() {
   const filteredOrders=orders.filter(o=>orderFilter==="All"||o.status===orderFilter);
   const oc={All:orders.length,Pending:orders.filter(o=>o.status==="Pending").length,Packed:orders.filter(o=>o.status==="Packed").length,Dispatched:orders.filter(o=>o.status==="Dispatched").length,Delivered:orders.filter(o=>o.status==="Delivered").length};
 
-  if(payStatus==="success") return(
+  if(payStatus==="success") return (
     <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.offwhite,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{...bxS,textAlign:"center",maxWidth:480}}>
         <img src={LOGO} alt="Trueleaf" style={{maxWidth:220,width:"80%",marginBottom:"1rem"}} onError={e=>e.target.style.display="none"}/>
