@@ -1,5 +1,9 @@
 import { useState, useMemo, useEffect } from "react";
 
+const EMAILJS_SERVICE = "service_e6cff14";
+const EMAILJS_TEMPLATE = "template_rhia9oj";
+const EMAILJS_KEY = "acXmr7MDPnpLcE_xJ";
+
 const YOCO_PUBLIC_KEY = "pk_test_b6e7873f791noe800c04";
 const WA = "27832309883";
 const EMAIL = "wreford19@gmail.com";
@@ -350,7 +354,30 @@ export default function App() {
   const cartCount = cart.reduce((s,x)=>s+x.qty,0);
   const closeCart = ()=>{setCartOpen(false);setStep(0);};
 
-  const sendWhatsApp = (order) => {
+  const sendEmail = async (order) => {
+    try {
+      await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+        method: "POST",
+        headers: {"Content-Type":"application/json"},
+        body: JSON.stringify({
+          service_id: EMAILJS_SERVICE,
+          template_id: EMAILJS_TEMPLATE,
+          user_id: EMAILJS_KEY,
+          template_params: {
+            order_id: order.id,
+            date: order.date,
+            customer_name: order.customer.name,
+            customer_phone: order.customer.phone,
+            customer_email: order.customer.email,
+            address: order.customer.street+", "+order.customer.suburb+", "+order.customer.city+", "+order.customer.province+" "+order.customer.postal,
+            items: order.items.map(x=>x.qty+"x "+x.name+" @ R"+x.price+" = R"+(x.price*x.qty).toFixed(2)).join("\n"),
+            seeds_total: order.seedsTotal.toFixed(2),
+            order_total: order.total.toFixed(2),
+          }
+        })
+      });
+    } catch(e){ console.log("Email error:",e); }
+  };
     const msg = encodeURIComponent(
       "🌱 NEW ORDER - Trueleaf Seeds\n"+
       "================================\n"+
@@ -406,6 +433,7 @@ export default function App() {
       });
       const data = await res.json();
       if(data.redirectUrl){
+        sendEmail(newOrder);
         sendWhatsApp(newOrder);
         window.location.href = data.redirectUrl;
       } else { setPayError("Payment could not be created. Please try again."); }
