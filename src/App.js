@@ -289,316 +289,383 @@ const CAT_STYLE={
 const C={darkGreen:"#2d4a1e",midGreen:"#3d6b28",parchment:"#f5edd8",parchmentDark:"#e8d5a3",brown:"#5c3d1e",cream:"#faf7f0",offwhite:"#f7f4ec",border:"#ddd5b8",text:"#2a2015",textMid:"#5c4a2a",textLight:"#8a7a5a"};
 const SC={Pending:{bg:"#fff3cd",color:"#856404",border:"#ffc107"},Packed:{bg:"#cfe2ff",color:"#084298",border:"#0d6efd"},Dispatched:{bg:"#d1ecf1",color:"#0c5460",border:"#17a2b8"},Delivered:{bg:"#d4edda",color:"#155724",border:"#28a745"}};
 
+// ── localStorage helpers ──────────────────────────────────────────────────────
+const lsGet = (key, fallback) => { try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch { return fallback; } };
+const lsSet = (key, val) => { try { localStorage.setItem(key, JSON.stringify(val)); } catch {} };
+
+// ── Progress indicator component ──────────────────────────────────────────────
+const STEPS = ["Cart", "Details", "Review"];
+function ProgressBar({ step }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "1rem", gap: 0 }}>
+      {STEPS.map((label, i) => {
+        const active = i === step;
+        const done = i < step;
+        return (
+          <div key={label} style={{ display: "flex", alignItems: "center" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 3 }}>
+              <div style={{
+                width: 28, height: 28, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+                background: done ? C.darkGreen : active ? C.midGreen : C.border,
+                color: done || active ? "#fff" : C.textLight,
+                fontSize: 12, fontWeight: 700, transition: "all 0.2s",
+                border: active ? "2px solid " + C.darkGreen : "2px solid transparent",
+              }}>
+                {done ? "✓" : i + 1}
+              </div>
+              <span style={{ fontSize: 10, color: active ? C.darkGreen : done ? C.midGreen : C.textLight, fontWeight: active ? 700 : 400, whiteSpace: "nowrap" }}>{label}</span>
+            </div>
+            {i < STEPS.length - 1 && (
+              <div style={{ width: 40, height: 2, background: done ? C.darkGreen : C.border, margin: "0 4px", marginBottom: 14, transition: "background 0.2s" }} />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function App() {
-  const [products,setProducts]=useState(INIT);
-  const [orders,setOrders]=useState([]);
-  const [view,setView]=useState("store");
-  const [adminTab,setAdminTab]=useState("orders");
-  const [adminAuth,setAdminAuth]=useState(false);
-  const [adminPw,setAdminPw]=useState("");
-  const [adminErr,setAdminErr]=useState(false);
-  const [search,setSearch]=useState("");
-  const [cat,setCat]=useState("All");
-  const [cart,setCart]=useState([]);
-  const [editId,setEditId]=useState(null);
-  const [editData,setEditData]=useState({});
-  const [cartOpen,setCartOpen]=useState(false);
-  const [step,setStep]=useState(0);
-  const [cust,setCust]=useState({name:"",phone:"",email:"",street:"",suburb:"",city:"",province:"",postal:""});
-  const [toast,setToast]=useState("");
-  const [bulkPrice,setBulkPrice]=useState("");
-  const [bulkCat,setBulkCat]=useState("All");
-  const [payLoading,setPayLoading]=useState(false);
-  const [payError,setPayError]=useState("");
-  const [payStatus,setPayStatus]=useState(null);
-  const [orderFilter,setOrderFilter]=useState("All");
-  const [expandedOrder,setExpandedOrder]=useState(null);
+  // ── State ───────────────────────────────────────────────────────────────────
+  const [products, setProducts] = useState(INIT);
+  const [orders, setOrders] = useState(() => lsGet("tl_orders", []));
+  const [view, setView] = useState("store");
+  const [adminTab, setAdminTab] = useState("orders");
+  const [adminAuth, setAdminAuth] = useState(false);
+  const [adminPw, setAdminPw] = useState("");
+  const [adminErr, setAdminErr] = useState(false);
+  const [search, setSearch] = useState("");
+  const [cat, setCat] = useState("All");
 
-  useEffect(()=>{
-    const p=new URLSearchParams(window.location.search);
-    if(p.get("payment")==="success") setPayStatus("success");
-    if(p.get("payment")==="cancelled") setPayStatus("cancelled");
-    try{const s=localStorage.getItem("tl_orders");if(s)setOrders(JSON.parse(s));}catch{}
-  },[]);
+  // Cart persisted to localStorage
+  const [cart, setCart] = useState(() => lsGet("tl_cart", []));
+  const saveCart = (newCart) => { setCart(newCart); lsSet("tl_cart", newCart); };
 
-  const saveOrders=o=>{setOrders(o);try{localStorage.setItem("tl_orders",JSON.stringify(o));}catch{}};
-  const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
+  const [editId, setEditId] = useState(null);
+  const [editData, setEditData] = useState({});
+  const [cartOpen, setCartOpen] = useState(false);
+  const [step, setStep] = useState(0);
 
-  const filtered=useMemo(()=>products.filter(p=>(cat==="All"||p.category===cat)&&p.name.toLowerCase().includes(search.toLowerCase())&&p.stock),[products,cat,search]);
+  // Customer details persisted to localStorage so returning customers don't retype
+  const [cust, setCust] = useState(() => lsGet("tl_cust", {name:"",phone:"",email:"",street:"",suburb:"",city:"",province:"",postal:""}));
+  const saveCust = (newCust) => { setCust(newCust); lsSet("tl_cust", newCust); };
 
-  const addCart=p=>{
-    if(p.outOfStock)return;
-    setCart(c=>{const ex=c.find(x=>x.id===p.id);return ex?c.map(x=>x.id===p.id?{...x,qty:x.qty+1}:x):[...c,{...p,qty:1}];});
-    showToast(p.name+" added to cart!");
+  const [toast, setToast] = useState("");
+  const [bulkPrice, setBulkPrice] = useState("");
+  const [bulkCat, setBulkCat] = useState("All");
+  const [payLoading, setPayLoading] = useState(false);
+  const [payError, setPayError] = useState("");
+  const [payStatus, setPayStatus] = useState(null);
+  const [orderFilter, setOrderFilter] = useState("All");
+  const [expandedOrder, setExpandedOrder] = useState(null);
+
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get("payment") === "success") { setPayStatus("success"); saveCart([]); }
+    if (p.get("payment") === "cancelled") setPayStatus("cancelled");
+  }, []);
+
+  const saveOrders = o => { setOrders(o); lsSet("tl_orders", o); };
+  const showToast = msg => { setToast(msg); setTimeout(() => setToast(""), 2500); };
+
+  const filtered = useMemo(() => products.filter(p =>
+    (cat === "All" || p.category === cat) &&
+    p.name.toLowerCase().includes(search.toLowerCase()) &&
+    p.stock
+  ), [products, cat, search]);
+
+  const addCart = p => {
+    if (p.outOfStock) return;
+    const updated = (() => {
+      const ex = cart.find(x => x.id === p.id);
+      return ex ? cart.map(x => x.id === p.id ? { ...x, qty: x.qty + 1 } : x) : [...cart, { ...p, qty: 1 }];
+    })();
+    saveCart(updated);
+    showToast(p.name + " added to cart!");
   };
 
-  const seedsTotal=cart.reduce((s,x)=>s+x.price*x.qty,0);
-  const cartTotal=cart.length>0?seedsTotal+PUDO_FEE+PACKAGING_FEE:0;
-  const cartCount=cart.reduce((s,x)=>s+x.qty,0);
-  const closeCart=()=>{setCartOpen(false);setStep(0);};
+  const updateCartQty = (id, delta) => {
+    const updated = cart.map(i => i.id === id ? { ...i, qty: i.qty + delta } : i).filter(i => i.qty > 0);
+    saveCart(updated);
+  };
 
-  const sendEmail=async order=>{
-    try{
-      await fetch("https://api.emailjs.com/api/v1.0/email/send",{
-        method:"POST",
-        headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({
-          service_id:EMAILJS_SERVICE,
-          template_id:EMAILJS_TEMPLATE,
-          user_id:EMAILJS_KEY,
-          template_params:{
-            order_id:order.id,
-            date:order.date,
-            customer_name:order.customer.name,
-            customer_phone:order.customer.phone,
-            customer_email:order.customer.email,
-            address:order.customer.street+", "+order.customer.suburb+", "+order.customer.city+", "+order.customer.province+" "+order.customer.postal,
-            items:order.items.map(x=>x.qty+"x "+x.name+" @ R"+x.price+" = R"+(x.price*x.qty).toFixed(2)).join(", "),
-            seeds_total:order.seedsTotal.toFixed(2),
-            order_total:order.total.toFixed(2),
+  const clearCart = () => { saveCart([]); showToast("Cart cleared"); };
+
+  const seedsTotal = cart.reduce((s, x) => s + x.price * x.qty, 0);
+  const cartTotal = cart.length > 0 ? seedsTotal + PUDO_FEE + PACKAGING_FEE : 0;
+  const cartCount = cart.reduce((s, x) => s + x.qty, 0);
+  const closeCart = () => { setCartOpen(false); setStep(0); };
+
+  const sendEmail = async order => {
+    try {
+      await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          service_id: EMAILJS_SERVICE,
+          template_id: EMAILJS_TEMPLATE,
+          user_id: EMAILJS_KEY,
+          template_params: {
+            order_id: order.id,
+            date: order.date,
+            customer_name: order.customer.name,
+            customer_phone: order.customer.phone,
+            customer_email: order.customer.email,
+            address: order.customer.street + ", " + order.customer.suburb + ", " + order.customer.city + ", " + order.customer.province + " " + order.customer.postal,
+            items: order.items.map(x => x.qty + "x " + x.name + " @ R" + x.price + " = R" + (x.price * x.qty).toFixed(2)).join(", "),
+            seeds_total: order.seedsTotal.toFixed(2),
+            order_total: order.total.toFixed(2),
           }
         })
       });
-    }catch(e){console.log("Email error:",e);}
+    } catch (e) { console.log("Email error:", e); }
   };
 
-  const handlePay=async()=>{
-    const newOrder={
-      id:"ORD-"+Date.now(),
-      date:new Date().toLocaleString("en-ZA"),
-      customer:{...cust},
-      items:cart.map(x=>({name:x.name,qty:x.qty,price:x.price,image:x.image})),
+  const handlePay = async () => {
+    const newOrder = {
+      id: "ORD-" + Date.now(),
+      date: new Date().toLocaleString("en-ZA"),
+      customer: { ...cust },
+      items: cart.map(x => ({ name: x.name, qty: x.qty, price: x.price, image: x.image })),
       seedsTotal,
-      total:cartTotal,
-      status:"Pending",
-      pudoRef:"",
-      notes:"",
+      total: cartTotal,
+      status: "Pending",
+      pudoRef: "",
+      notes: "",
     };
-    saveOrders([newOrder,...orders]);
-    setPayLoading(true);setPayError("");
-    try{
-      const res=await fetch("/.netlify/functions/create-payment",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({amount:Math.round(cartTotal*100)})});
-      const data=await res.json();
-      if(data.redirectUrl){
+    saveOrders([newOrder, ...orders]);
+    setPayLoading(true); setPayError("");
+    try {
+      const res = await fetch("/.netlify/functions/create-payment", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount: Math.round(cartTotal * 100) }) });
+      const data = await res.json();
+      if (data.redirectUrl) {
         sendEmail(newOrder);
-        window.location.href=data.redirectUrl;
-      }else{setPayError("Payment could not be created. Please try again.");}
-    }catch{setPayError("Something went wrong. Please try again.");}
+        window.location.href = data.redirectUrl;
+      } else { setPayError("Payment could not be created. Please try again."); }
+    } catch { setPayError("Something went wrong. Please try again."); }
     setPayLoading(false);
   };
 
-  const updateOrderStatus=(id,status)=>saveOrders(orders.map(o=>o.id===id?{...o,status}:o));
-  const updateOrderField=(id,field,val)=>saveOrders(orders.map(o=>o.id===id?{...o,[field]:val}:o));
-  const deleteOrder=id=>{saveOrders(orders.filter(o=>o.id!==id));showToast("Order deleted");};
+  const updateOrderStatus = (id, status) => saveOrders(orders.map(o => o.id === id ? { ...o, status } : o));
+  const updateOrderField = (id, field, val) => saveOrders(orders.map(o => o.id === id ? { ...o, [field]: val } : o));
+  const deleteOrder = id => { saveOrders(orders.filter(o => o.id !== id)); showToast("Order deleted"); };
+  const handleAdminLogin = () => { if (adminPw === ADMIN_PW) { setAdminAuth(true); setAdminErr(false); } else { setAdminErr(true); setAdminPw(""); } };
+  const startEdit = p => { setEditId(p.id); setEditData({ ...p }); };
+  const saveEdit = () => { setProducts(ps => ps.map(p => p.id === editId ? { ...p, ...editData, price: Number(editData.price), cost: Number(editData.cost) } : p)); setEditId(null); showToast("Saved!"); };
+  const applyBulk = () => { if (!bulkPrice) return; setProducts(ps => ps.map(p => (bulkCat === "All" || p.category === bulkCat) ? { ...p, price: Number(bulkPrice) } : p)); showToast("Applied!"); setBulkPrice(""); };
+  const addNew = () => { const n = { id: Date.now(), name: "New Product", category: "Vegetable", cost: 25, price: 45, stock: true, outOfStock: false, image: "" }; setProducts(ps => [n, ...ps]); startEdit(n); };
+  const del = id => { setProducts(ps => ps.filter(p => p.id !== id)); showToast("Deleted"); };
 
-  const handleAdminLogin=()=>{if(adminPw===ADMIN_PW){setAdminAuth(true);setAdminErr(false);}else{setAdminErr(true);setAdminPw("");}};
-  const startEdit=p=>{setEditId(p.id);setEditData({...p});};
-  const saveEdit=()=>{setProducts(ps=>ps.map(p=>p.id===editId?{...p,...editData,price:Number(editData.price),cost:Number(editData.cost)}:p));setEditId(null);showToast("Saved!");};
-  const applyBulk=()=>{if(!bulkPrice)return;setProducts(ps=>ps.map(p=>(bulkCat==="All"||p.category===bulkCat)?{...p,price:Number(bulkPrice)}:p));showToast("Applied!");setBulkPrice("");};
-  const addNew=()=>{const n={id:Date.now(),name:"New Product",category:"Vegetable",cost:25,price:45,stock:true,outOfStock:false,image:""};setProducts(ps=>[n,...ps]);startEdit(n);};
-  const del=id=>{setProducts(ps=>ps.filter(p=>p.id!==id));showToast("Deleted");};
+  // ── Shared styles ───────────────────────────────────────────────────────────
+  const iS = { width: "100%", padding: "9px 12px", borderRadius: 6, border: "1px solid " + C.border, fontSize: 13, boxSizing: "border-box", background: C.cream, fontFamily: "Georgia,serif", color: C.text };
+  const bG = { border: "none", borderRadius: 6, padding: "10px 18px", cursor: "pointer", background: C.darkGreen, color: "#fff", fontFamily: "Georgia,serif", fontSize: 13, fontWeight: 600 };
+  const bP = { border: "1px solid " + C.border, borderRadius: 6, padding: "10px 18px", cursor: "pointer", background: C.parchment, color: C.brown, fontFamily: "Georgia,serif", fontSize: 13, fontWeight: 600 };
+  const mS = { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(30,20,5,0.6)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 100 };
+  const bxS = { background: C.cream, borderRadius: 12, padding: "1.5rem", width: "min(500px,95vw)", maxHeight: "90vh", overflowY: "auto", border: "1px solid " + C.border };
+  const pN = { background: "#eef5e8", border: "1px solid #c8ddb0", borderRadius: 8, padding: "0.6rem 0.8rem", fontSize: 12, color: C.darkGreen };
 
-  const iS={width:"100%",padding:"9px 12px",borderRadius:6,border:"1px solid "+C.border,fontSize:13,boxSizing:"border-box",background:C.cream,fontFamily:"Georgia,serif",color:C.text};
-  const bG={border:"none",borderRadius:6,padding:"10px 18px",cursor:"pointer",background:C.darkGreen,color:"#fff",fontFamily:"Georgia,serif",fontSize:13,fontWeight:600};
-  const bP={border:"1px solid "+C.border,borderRadius:6,padding:"10px 18px",cursor:"pointer",background:C.parchment,color:C.brown,fontFamily:"Georgia,serif",fontSize:13,fontWeight:600};
-  const mS={position:"fixed",top:0,left:0,right:0,bottom:0,background:"rgba(30,20,5,0.6)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100};
-  const bxS={background:C.cream,borderRadius:12,padding:"1.5rem",width:"min(500px,95vw)",maxHeight:"90vh",overflowY:"auto",border:"1px solid "+C.border};
-  const pN={background:"#eef5e8",border:"1px solid #c8ddb0",borderRadius:8,padding:"0.6rem 0.8rem",fontSize:12,color:C.darkGreen};
+  // Sticky footer for cart modal steps
+  const stickyFooter = { position: "sticky", bottom: 0, background: C.cream, paddingTop: "0.75rem", paddingBottom: "0.25rem", marginTop: "0.75rem", borderTop: "1px solid " + C.border };
 
-  const filteredOrders=orders.filter(o=>orderFilter==="All"||o.status===orderFilter);
-  const oc={All:orders.length,Pending:orders.filter(o=>o.status==="Pending").length,Packed:orders.filter(o=>o.status==="Packed").length,Dispatched:orders.filter(o=>o.status==="Dispatched").length,Delivered:orders.filter(o=>o.status==="Delivered").length};
+  const filteredOrders = orders.filter(o => orderFilter === "All" || o.status === orderFilter);
+  const oc = { All: orders.length, Pending: orders.filter(o => o.status === "Pending").length, Packed: orders.filter(o => o.status === "Packed").length, Dispatched: orders.filter(o => o.status === "Dispatched").length, Delivered: orders.filter(o => o.status === "Delivered").length };
 
-  if(payStatus==="success") return (
-    <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.offwhite,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{...bxS,textAlign:"center",maxWidth:480}}>
-        <img src={LOGO} alt="Trueleaf" style={{maxWidth:220,width:"80%",marginBottom:"1rem"}} onError={e=>e.target.style.display="none"}/>
-        <div style={{fontSize:48,marginBottom:"0.5rem"}}>🌱</div>
-        <h2 style={{color:C.darkGreen,margin:"0 0 0.5rem",fontSize:22}}>Thank you for your support!</h2>
-        <p style={{color:C.textMid,fontSize:14,lineHeight:1.8,margin:"0 0 1rem"}}>Your payment was successful. We truly appreciate your support of heirloom seeds and sustainable growing in Africa.</p>
-        <div style={{background:C.parchment,border:"1px solid "+C.border,borderRadius:10,padding:"1rem",marginBottom:"1rem",fontSize:13,color:C.brown,lineHeight:1.8}}>
-          <strong>What happens next?</strong><br/>We will confirm your order and arrange your Pudo locker delivery within 1 business day. You will receive an SMS from Pudo when your seeds are ready for collection.<br/><br/>Questions? Call us on <strong>{PHONE}</strong>
+  // ── Success / Cancelled pages ───────────────────────────────────────────────
+  if (payStatus === "success") return (
+    <div style={{ fontFamily: "Georgia,serif", minHeight: "100vh", background: C.offwhite, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ ...bxS, textAlign: "center", maxWidth: 480 }}>
+        <img src={LOGO} alt="Trueleaf" style={{ maxWidth: 220, width: "80%", marginBottom: "1rem" }} onError={e => e.target.style.display = "none"} />
+        <div style={{ fontSize: 48, marginBottom: "0.5rem" }}>🌱</div>
+        <h2 style={{ color: C.darkGreen, margin: "0 0 0.5rem", fontSize: 22 }}>Thank you for your support!</h2>
+        <p style={{ color: C.textMid, fontSize: 14, lineHeight: 1.8, margin: "0 0 1rem" }}>Your payment was successful. We truly appreciate your support of heirloom seeds and sustainable growing in Africa.</p>
+        <div style={{ background: C.parchment, border: "1px solid " + C.border, borderRadius: 10, padding: "1rem", marginBottom: "1rem", fontSize: 13, color: C.brown, lineHeight: 1.8 }}>
+          <strong>What happens next?</strong><br />We will confirm your order and arrange your Pudo locker delivery within 1 business day. You will receive an SMS from Pudo when your seeds are ready for collection.<br /><br />Questions? Call us on <strong>{PHONE}</strong>
         </div>
-        <button style={{...bG,width:"100%",padding:12,marginBottom:8}} onClick={()=>{window.history.replaceState({},"","/");setPayStatus(null);setCart([]);setCust({name:"",phone:"",email:"",street:"",suburb:"",city:"",province:"",postal:""});}}>Continue shopping</button>
-        <a href={"https://wa.me/"+WA} target="_blank" rel="noreferrer" style={{...bP,display:"block",textAlign:"center",textDecoration:"none",padding:10}}>WhatsApp us</a>
+        <button style={{ ...bG, width: "100%", padding: 12, marginBottom: 8 }} onClick={() => { window.history.replaceState({}, "", "/"); setPayStatus(null); saveCust({ name: "", phone: "", email: "", street: "", suburb: "", city: "", province: "", postal: "" }); }}>Continue shopping</button>
+        <a href={"https://wa.me/" + WA} target="_blank" rel="noreferrer" style={{ ...bP, display: "block", textAlign: "center", textDecoration: "none", padding: 10 }}>WhatsApp us</a>
       </div>
     </div>
   );
 
-  if(payStatus==="cancelled") return(
-    <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.offwhite,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{...bxS,textAlign:"center",maxWidth:440}}>
-        <div style={{fontSize:48,marginBottom:"0.5rem"}}>🌿</div>
-        <h2 style={{color:C.darkGreen,margin:"0 0 0.5rem"}}>Payment cancelled</h2>
-        <p style={{color:C.textMid,fontSize:14,lineHeight:1.7,margin:"0 0 1rem"}}>No worries — your cart is still waiting for you. Come back anytime!</p>
-        <button style={{...bG,width:"100%",padding:12}} onClick={()=>{window.history.replaceState({},"","/");setPayStatus(null);}}>Back to store</button>
+  if (payStatus === "cancelled") return (
+    <div style={{ fontFamily: "Georgia,serif", minHeight: "100vh", background: C.offwhite, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ ...bxS, textAlign: "center", maxWidth: 440 }}>
+        <div style={{ fontSize: 48, marginBottom: "0.5rem" }}>🌿</div>
+        <h2 style={{ color: C.darkGreen, margin: "0 0 0.5rem" }}>Payment cancelled</h2>
+        <p style={{ color: C.textMid, fontSize: 14, lineHeight: 1.7, margin: "0 0 1rem" }}>No worries — your cart is still waiting for you. Come back anytime!</p>
+        <button style={{ ...bG, width: "100%", padding: 12 }} onClick={() => { window.history.replaceState({}, "", "/"); setPayStatus(null); }}>Back to store</button>
       </div>
     </div>
   );
 
-  return(
-    <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.offwhite,color:C.text}}>
-      {toast&&<div style={{position:"fixed",bottom:20,left:"50%",transform:"translateX(-50%)",background:C.darkGreen,color:"#fff",padding:"9px 20px",borderRadius:20,fontSize:13,zIndex:200,whiteSpace:"nowrap"}}>{toast}</div>}
-      <a href={"https://wa.me/"+WA+"?text="+encodeURIComponent("Hi! I have a question about your seeds.")} target="_blank" rel="noreferrer" style={{position:"fixed",bottom:24,right:24,background:"#25D366",color:"#fff",borderRadius:"50%",width:52,height:52,display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,zIndex:150,textDecoration:"none",boxShadow:"0 4px 12px rgba(0,0,0,0.2)"}}>💬</a>
+  // ── Main render ─────────────────────────────────────────────────────────────
+  return (
+    <div style={{ fontFamily: "Georgia,serif", minHeight: "100vh", background: C.offwhite, color: C.text }}>
+      {toast && <div style={{ position: "fixed", bottom: 20, left: "50%", transform: "translateX(-50%)", background: C.darkGreen, color: "#fff", padding: "9px 20px", borderRadius: 20, fontSize: 13, zIndex: 200, whiteSpace: "nowrap" }}>{toast}</div>}
+      <a href={"https://wa.me/" + WA + "?text=" + encodeURIComponent("Hi! I have a question about your seeds.")} target="_blank" rel="noreferrer" style={{ position: "fixed", bottom: 24, right: 24, background: "#25D366", color: "#fff", borderRadius: "50%", width: 52, height: 52, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 26, zIndex: 150, textDecoration: "none", boxShadow: "0 4px 12px rgba(0,0,0,0.2)" }}>💬</a>
 
-      <div style={{background:C.darkGreen,color:"#e8d5a3",fontSize:12,textAlign:"center",padding:"5px",letterSpacing:"0.5px"}}>Organically Grown | Non-GMO | Open-Pollinated | Selected for African Growing Conditions</div>
+      <div style={{ background: C.darkGreen, color: "#e8d5a3", fontSize: 12, textAlign: "center", padding: "5px", letterSpacing: "0.5px" }}>Organically Grown | Non-GMO | Open-Pollinated | Selected for African Growing Conditions</div>
 
-      <nav style={{background:C.parchment,borderBottom:"2px solid "+C.border,padding:"0 1rem",display:"flex",alignItems:"center",gap:"0.5rem",minHeight:64,flexWrap:"wrap"}}>
-        <div style={{flex:1,display:"flex",alignItems:"center",gap:10}}>
-          <img src={LOGO} alt="Trueleaf Seeds" style={{height:48,objectFit:"contain"}} onError={e=>e.target.style.display="none"}/>
-          <div><p style={{margin:0,fontSize:16,fontWeight:700,color:C.darkGreen,letterSpacing:"0.5px",lineHeight:1.1}}>TRUELEAF</p><p style={{margin:0,fontSize:10,color:C.brown,letterSpacing:"2px",fontFamily:"system-ui,sans-serif"}}>SEED CO.</p></div>
+      <nav style={{ background: C.parchment, borderBottom: "2px solid " + C.border, padding: "0 1rem", display: "flex", alignItems: "center", gap: "0.5rem", minHeight: 64, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10 }}>
+          <img src={LOGO} alt="Trueleaf Seeds" style={{ height: 48, objectFit: "contain" }} onError={e => e.target.style.display = "none"} />
+          <div><p style={{ margin: 0, fontSize: 16, fontWeight: 700, color: C.darkGreen, letterSpacing: "0.5px", lineHeight: 1.1 }}>TRUELEAF</p><p style={{ margin: 0, fontSize: 10, color: C.brown, letterSpacing: "2px", fontFamily: "system-ui,sans-serif" }}>SEED CO.</p></div>
         </div>
-        <button style={{...bP,background:view==="store"?C.darkGreen:"transparent",color:view==="store"?"#fff":C.brown,border:"none",fontSize:13}} onClick={()=>setView("store")}>Shop</button>
-        <button style={{...bP,background:view==="admin"?C.darkGreen:"transparent",color:view==="admin"?"#fff":C.brown,border:"none",fontSize:13,position:"relative"}} onClick={()=>{setView("admin");setAdminAuth(false);setAdminPw("");}}>
-          Admin{oc.Pending>0&&<span style={{position:"absolute",top:-4,right:-4,background:"#e8762a",color:"#fff",borderRadius:"50%",width:16,height:16,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>{oc.Pending}</span>}
+        <button style={{ ...bP, background: view === "store" ? C.darkGreen : "transparent", color: view === "store" ? "#fff" : C.brown, border: "none", fontSize: 13 }} onClick={() => setView("store")}>Shop</button>
+        <button style={{ ...bP, background: view === "admin" ? C.darkGreen : "transparent", color: view === "admin" ? "#fff" : C.brown, border: "none", fontSize: 13, position: "relative" }} onClick={() => { setView("admin"); setAdminAuth(false); setAdminPw(""); }}>
+          Admin{oc.Pending > 0 && <span style={{ position: "absolute", top: -4, right: -4, background: "#e8762a", color: "#fff", borderRadius: "50%", width: 16, height: 16, fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>{oc.Pending}</span>}
         </button>
-        <button style={{...bG,display:"flex",alignItems:"center",gap:6}} onClick={()=>setCartOpen(true)}>🛒 Cart {cartCount>0&&<span style={{background:"#e8762a",color:"#fff",borderRadius:10,padding:"0 6px",fontSize:11,fontWeight:700}}>{cartCount}</span>}</button>
+        <button style={{ ...bG, display: "flex", alignItems: "center", gap: 6 }} onClick={() => setCartOpen(true)}>
+          🛒 Cart {cartCount > 0 && <span style={{ background: "#e8762a", color: "#fff", borderRadius: 10, padding: "0 6px", fontSize: 11, fontWeight: 700 }}>{cartCount}</span>}
+        </button>
       </nav>
 
-      {view==="store"&&<div>
-        <div style={{background:C.parchment,borderBottom:"2px solid "+C.border,display:"flex",flexDirection:"column",alignItems:"center",padding:"1.5rem 1rem",textAlign:"center"}}>
-          <img src={LOGO} alt="Trueleaf Seeds Logo" style={{maxWidth:380,width:"85%",objectFit:"contain",marginBottom:"0.5rem"}} onError={e=>e.target.style.display="none"}/>
-          <p style={{margin:0,fontSize:12,color:C.textLight,letterSpacing:"2px",fontFamily:"system-ui,sans-serif",textTransform:"uppercase"}}>Heirloom Seeds That Grow With You</p>
+      {view === "store" && <div>
+        <div style={{ background: C.parchment, borderBottom: "2px solid " + C.border, display: "flex", flexDirection: "column", alignItems: "center", padding: "1.5rem 1rem", textAlign: "center" }}>
+          <img src={LOGO} alt="Trueleaf Seeds Logo" style={{ maxWidth: 380, width: "85%", objectFit: "contain", marginBottom: "0.5rem" }} onError={e => e.target.style.display = "none"} />
+          <p style={{ margin: 0, fontSize: 12, color: C.textLight, letterSpacing: "2px", fontFamily: "system-ui,sans-serif", textTransform: "uppercase" }}>Heirloom Seeds That Grow With You</p>
         </div>
-        <div style={{background:"linear-gradient(160deg,"+C.darkGreen+" 0%,#3d6b28 100%)",color:"#fff",padding:"2.5rem 1.5rem",textAlign:"center"}}>
-          <div style={{maxWidth:640,margin:"0 auto"}}>
-            <p style={{color:C.parchmentDark,fontSize:12,letterSpacing:"2px",textTransform:"uppercase",margin:"0 0 0.5rem",fontFamily:"system-ui,sans-serif"}}>Heirloom · Open-Pollinated · Non-GMO</p>
-            <h1 style={{fontSize:28,fontWeight:700,margin:"0 0 0.5rem",color:"#fff"}}>Seeds That Grow With You</h1>
-            <p style={{color:"rgba(255,255,255,0.75)",fontSize:15,margin:"0 0 1.25rem",lineHeight:1.7}}>Rooted in tradition. Grown for the future. Carefully selected heirloom varieties that thrive in African growing conditions.</p>
-            <div style={{display:"flex",gap:8,justifyContent:"center",flexWrap:"wrap"}}>
-              {["Organically grown","Save your own seeds","Support local growers","African adapted"].map(t=><span key={t} style={{fontSize:11,color:C.midGreen,background:"#eef5e8",border:"1px solid #c8ddb0",borderRadius:20,padding:"3px 10px"}}>✔ {t}</span>)}
+        <div style={{ background: "linear-gradient(160deg," + C.darkGreen + " 0%,#3d6b28 100%)", color: "#fff", padding: "2.5rem 1.5rem", textAlign: "center" }}>
+          <div style={{ maxWidth: 640, margin: "0 auto" }}>
+            <p style={{ color: C.parchmentDark, fontSize: 12, letterSpacing: "2px", textTransform: "uppercase", margin: "0 0 0.5rem", fontFamily: "system-ui,sans-serif" }}>Heirloom · Open-Pollinated · Non-GMO</p>
+            <h1 style={{ fontSize: 28, fontWeight: 700, margin: "0 0 0.5rem", color: "#fff" }}>Seeds That Grow With You</h1>
+            <p style={{ color: "rgba(255,255,255,0.75)", fontSize: 15, margin: "0 0 1.25rem", lineHeight: 1.7 }}>Rooted in tradition. Grown for the future. Carefully selected heirloom varieties that thrive in African growing conditions.</p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+              {["Organically grown", "Save your own seeds", "Support local growers", "African adapted"].map(t => <span key={t} style={{ fontSize: 11, color: C.midGreen, background: "#eef5e8", border: "1px solid #c8ddb0", borderRadius: 20, padding: "3px 10px" }}>✔ {t}</span>)}
             </div>
           </div>
         </div>
-        <div style={{background:C.parchment,borderBottom:"1px solid "+C.border,padding:"1rem",display:"flex",justifyContent:"center",gap:"2rem",flexWrap:"wrap"}}>
-          {[["1. Browse","260+ heirloom varieties"],["2. Checkout","Pay securely via YOCO"],["3. Pudo","Collect from your nearest locker"],["4. Grow","Save seeds year after year"]].map(([t,d])=>(
-            <div key={t} style={{textAlign:"center",maxWidth:160}}><p style={{margin:0,fontWeight:700,fontSize:13,color:C.darkGreen}}>{t}</p><p style={{margin:"2px 0 0",fontSize:11,color:C.textMid}}>{d}</p></div>
+        <div style={{ background: C.parchment, borderBottom: "1px solid " + C.border, padding: "1rem", display: "flex", justifyContent: "center", gap: "2rem", flexWrap: "wrap" }}>
+          {[["1. Browse", "260+ heirloom varieties"], ["2. Checkout", "Pay securely via YOCO"], ["3. Pudo", "Collect from your nearest locker"], ["4. Grow", "Save seeds year after year"]].map(([t, d]) => (
+            <div key={t} style={{ textAlign: "center", maxWidth: 160 }}><p style={{ margin: 0, fontWeight: 700, fontSize: 13, color: C.darkGreen }}>{t}</p><p style={{ margin: "2px 0 0", fontSize: 11, color: C.textMid }}>{d}</p></div>
           ))}
         </div>
-        <div style={{display:"flex",gap:8,padding:"0.75rem 1rem",flexWrap:"wrap",alignItems:"center",background:"#fff",borderBottom:"1px solid "+C.border}}>
-          <input style={{...iS,flex:1,minWidth:140}} placeholder="Search seeds..." value={search} onChange={e=>setSearch(e.target.value)}/>
-          <select style={{...iS,width:"auto"}} value={cat} onChange={e=>setCat(e.target.value)}>{CATS.map(c=><option key={c}>{c}</option>)}</select>
-          <span style={{fontSize:12,color:C.textLight}}>{filtered.length} products</span>
+        <div style={{ display: "flex", gap: 8, padding: "0.75rem 1rem", flexWrap: "wrap", alignItems: "center", background: "#fff", borderBottom: "1px solid " + C.border }}>
+          <input style={{ ...iS, flex: 1, minWidth: 140 }} placeholder="Search seeds..." value={search} onChange={e => setSearch(e.target.value)} />
+          <select style={{ ...iS, width: "auto" }} value={cat} onChange={e => setCat(e.target.value)}>{CATS.map(c => <option key={c}>{c}</option>)}</select>
+          <span style={{ fontSize: 12, color: C.textLight }}>{filtered.length} products</span>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:12,padding:"1rem"}}>
-          {filtered.map(p=>{
-            const cs=CAT_STYLE[p.category]||{bg:"#f0f0f0",color:"#555",icon:"🌿"};
-            return(
-              <div key={p.id} style={{background:"#fff",borderRadius:10,border:"1px solid "+C.border,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-                <div style={{width:"100%",height:130,background:cs.bg,overflow:"hidden",flexShrink:0,position:"relative",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  {p.image&&<img src={p.image} alt={p.name} style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>e.target.style.display="none"}/>}
-                  {!p.image&&<span style={{fontSize:36}}>{cs.icon}</span>}
-                  {p.outOfStock&&<div style={{position:"absolute",top:0,left:0,right:0,bottom:0,background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center"}}><span style={{background:"#c00",color:"#fff",fontSize:11,fontWeight:700,padding:"4px 10px",borderRadius:20}}>OUT OF STOCK</span></div>}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: 12, padding: "1rem" }}>
+          {filtered.map(p => {
+            const cs = CAT_STYLE[p.category] || { bg: "#f0f0f0", color: "#555", icon: "🌿" };
+            return (
+              <div key={p.id} style={{ background: "#fff", borderRadius: 10, border: "1px solid " + C.border, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+                <div style={{ width: "100%", height: 130, background: cs.bg, overflow: "hidden", flexShrink: 0, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {p.image && <img src={p.image} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => e.target.style.display = "none"} />}
+                  {!p.image && <span style={{ fontSize: 36 }}>{cs.icon}</span>}
+                  {p.outOfStock && <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ background: "#c00", color: "#fff", fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 20 }}>OUT OF STOCK</span></div>}
                 </div>
-                <div style={{padding:"10px 12px 12px",flex:1,display:"flex",flexDirection:"column"}}>
-                  <p style={{margin:"0 0 5px",fontWeight:700,fontSize:13,color:C.text,lineHeight:1.3}}>{p.name}</p>
-                  <span style={{display:"inline-block",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600,marginBottom:6,background:cs.bg,color:cs.color}}>{cs.icon} {p.category}</span>
-                  <p style={{fontSize:11,color:C.textLight,margin:"0 0 6px",fontStyle:"italic"}}>Open-pollinated · Heirloom</p>
-                  <p style={{fontSize:17,fontWeight:700,color:p.outOfStock?"#999":C.darkGreen,margin:"auto 0 8px"}}>R{p.price.toFixed(2)}</p>
-                  <button style={{...bG,padding:"8px",fontSize:12,width:"100%",opacity:p.outOfStock?0.5:1,background:p.outOfStock?"#999":C.darkGreen,cursor:p.outOfStock?"not-allowed":"pointer"}} onClick={()=>addCart(p)} disabled={p.outOfStock}>{p.outOfStock?"Out of stock":"+ Add to cart"}</button>
+                <div style={{ padding: "10px 12px 12px", flex: 1, display: "flex", flexDirection: "column" }}>
+                  <p style={{ margin: "0 0 5px", fontWeight: 700, fontSize: 13, color: C.text, lineHeight: 1.3 }}>{p.name}</p>
+                  <span style={{ display: "inline-block", padding: "2px 8px", borderRadius: 20, fontSize: 10, fontWeight: 600, marginBottom: 6, background: cs.bg, color: cs.color }}>{cs.icon} {p.category}</span>
+                  <p style={{ fontSize: 11, color: C.textLight, margin: "0 0 6px", fontStyle: "italic" }}>Open-pollinated · Heirloom</p>
+                  <p style={{ fontSize: 17, fontWeight: 700, color: p.outOfStock ? "#999" : C.darkGreen, margin: "auto 0 8px" }}>R{p.price.toFixed(2)}</p>
+                  <button style={{ ...bG, padding: "8px", fontSize: 12, width: "100%", opacity: p.outOfStock ? 0.5 : 1, background: p.outOfStock ? "#999" : C.darkGreen, cursor: p.outOfStock ? "not-allowed" : "pointer" }} onClick={() => addCart(p)} disabled={p.outOfStock}>{p.outOfStock ? "Out of stock" : "+ Add to cart"}</button>
                 </div>
               </div>
             );
           })}
         </div>
-        <div style={{background:C.darkGreen,color:"#fff",padding:"2.5rem 1.5rem",marginTop:"1rem"}}>
-          <h2 style={{textAlign:"center",fontSize:20,fontWeight:700,margin:"0 0 1.5rem",color:C.parchmentDark}}>Why Choose Trueleaf Seeds?</h2>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:16,maxWidth:720,margin:"0 auto"}}>
-            {[["Better Flavour","Grown for taste, not transport."],["Save Your Seeds","Harvest and replant year after year."],["Support Biodiversity","Preserve rare traditional varieties."],["Locally Adapted","Sourced from African growers."]].map(([t,d])=>(
-              <div key={t} style={{background:"rgba(255,255,255,0.08)",borderRadius:8,padding:"1rem",border:"1px solid rgba(255,255,255,0.1)"}}>
-                <p style={{margin:"0 0 4px",fontWeight:700,fontSize:13,color:C.parchmentDark}}>✔ {t}</p>
-                <p style={{margin:0,fontSize:12,color:"rgba(255,255,255,0.7)",lineHeight:1.5}}>{d}</p>
+        <div style={{ background: C.darkGreen, color: "#fff", padding: "2.5rem 1.5rem", marginTop: "1rem" }}>
+          <h2 style={{ textAlign: "center", fontSize: 20, fontWeight: 700, margin: "0 0 1.5rem", color: C.parchmentDark }}>Why Choose Trueleaf Seeds?</h2>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(180px,1fr))", gap: 16, maxWidth: 720, margin: "0 auto" }}>
+            {[["Better Flavour", "Grown for taste, not transport."], ["Save Your Seeds", "Harvest and replant year after year."], ["Support Biodiversity", "Preserve rare traditional varieties."], ["Locally Adapted", "Sourced from African growers."]].map(([t, d]) => (
+              <div key={t} style={{ background: "rgba(255,255,255,0.08)", borderRadius: 8, padding: "1rem", border: "1px solid rgba(255,255,255,0.1)" }}>
+                <p style={{ margin: "0 0 4px", fontWeight: 700, fontSize: 13, color: C.parchmentDark }}>✔ {t}</p>
+                <p style={{ margin: 0, fontSize: 12, color: "rgba(255,255,255,0.7)", lineHeight: 1.5 }}>{d}</p>
               </div>
             ))}
           </div>
         </div>
-        <footer style={{background:C.brown,color:C.parchment,padding:"1.5rem",textAlign:"center",fontSize:12}}>
-          <p style={{margin:"0 0 6px",fontSize:13,fontWeight:700}}>TRUELEAF SEEDS</p>
-          <p style={{margin:"0 0 4px",opacity:.8}}>📞 <a href={"tel:"+PHONE} style={{color:C.parchmentDark}}>{PHONE}</a> | ✉️ <a href={"mailto:"+EMAIL} style={{color:C.parchmentDark}}>{EMAIL}</a></p>
-          <p style={{margin:"0 0 8px",opacity:.7}}><a href={"https://wa.me/"+WA} target="_blank" rel="noreferrer" style={{color:"#90EE90"}}>💬 WhatsApp us</a></p>
-          <p style={{margin:"8px 0 0",opacity:.5,fontSize:10}}>All seeds are organically grown, open-pollinated and non-GMO. © 2026 Trueleaf Seeds. All rights reserved.</p>
+        <footer style={{ background: C.brown, color: C.parchment, padding: "1.5rem", textAlign: "center", fontSize: 12 }}>
+          <p style={{ margin: "0 0 6px", fontSize: 13, fontWeight: 700 }}>TRUELEAF SEEDS</p>
+          <p style={{ margin: "0 0 4px", opacity: .8 }}>📞 <a href={"tel:" + PHONE} style={{ color: C.parchmentDark }}>{PHONE}</a> | ✉️ <a href={"mailto:" + EMAIL} style={{ color: C.parchmentDark }}>{EMAIL}</a></p>
+          <p style={{ margin: "0 0 8px", opacity: .7 }}><a href={"https://wa.me/" + WA} target="_blank" rel="noreferrer" style={{ color: "#90EE90" }}>💬 WhatsApp us</a></p>
+          <p style={{ margin: "8px 0 0", opacity: .5, fontSize: 10 }}>All seeds are organically grown, open-pollinated and non-GMO. © 2026 Trueleaf Seeds. All rights reserved.</p>
         </footer>
       </div>}
 
-      {view==="admin"&&(!adminAuth?(
-        <div style={{display:"flex",alignItems:"center",justifyContent:"center",minHeight:"60vh"}}>
-          <div style={{background:C.cream,borderRadius:12,padding:"1.5rem",width:"min(340px,95vw)",border:"1px solid "+C.border,textAlign:"center"}}>
-            <div style={{fontSize:36,marginBottom:"0.5rem"}}>🔒</div>
-            <h3 style={{margin:"0 0 0.25rem",color:C.darkGreen}}>Admin access</h3>
-            <p style={{fontSize:13,color:C.textLight,margin:"0 0 1rem"}}>Enter your password to continue</p>
-            <input style={{...iS,textAlign:"center",letterSpacing:"2px",marginBottom:8}} type="password" placeholder="Password" value={adminPw} onChange={e=>setAdminPw(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAdminLogin()}/>
-            {adminErr&&<p style={{fontSize:12,color:"#c00",margin:"0 0 8px"}}>Incorrect password. Please try again.</p>}
-            <button style={{...bG,width:"100%",padding:"10px"}} onClick={handleAdminLogin}>Login</button>
+      {/* ── Admin panel ─────────────────────────────────────────────────────── */}
+      {view === "admin" && (!adminAuth ? (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "60vh" }}>
+          <div style={{ background: C.cream, borderRadius: 12, padding: "1.5rem", width: "min(340px,95vw)", border: "1px solid " + C.border, textAlign: "center" }}>
+            <div style={{ fontSize: 36, marginBottom: "0.5rem" }}>🔒</div>
+            <h3 style={{ margin: "0 0 0.25rem", color: C.darkGreen }}>Admin access</h3>
+            <p style={{ fontSize: 13, color: C.textLight, margin: "0 0 1rem" }}>Enter your password to continue</p>
+            <input style={{ ...iS, textAlign: "center", letterSpacing: "2px", marginBottom: 8 }} type="password" placeholder="Password" value={adminPw} onChange={e => setAdminPw(e.target.value)} onKeyDown={e => e.key === "Enter" && handleAdminLogin()} />
+            {adminErr && <p style={{ fontSize: 12, color: "#c00", margin: "0 0 8px" }}>Incorrect password. Please try again.</p>}
+            <button style={{ ...bG, width: "100%", padding: "10px" }} onClick={handleAdminLogin}>Login</button>
           </div>
         </div>
-      ):(
-        <div style={{padding:"1.25rem",maxWidth:960,margin:"0 auto"}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
-            <h2 style={{fontSize:18,fontWeight:700,color:C.darkGreen,margin:0}}>Admin panel</h2>
-            <button style={{...bP,fontSize:12,padding:"6px 14px"}} onClick={()=>setAdminAuth(false)}>Logout</button>
+      ) : (
+        <div style={{ padding: "1.25rem", maxWidth: 960, margin: "0 auto" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+            <h2 style={{ fontSize: 18, fontWeight: 700, color: C.darkGreen, margin: 0 }}>Admin panel</h2>
+            <button style={{ ...bP, fontSize: 12, padding: "6px 14px" }} onClick={() => setAdminAuth(false)}>Logout</button>
           </div>
-          <div style={{display:"flex",gap:4,marginBottom:"1.5rem",borderBottom:"2px solid "+C.border}}>
-            {[["orders","📦 Orders"],["products","🌱 Products"],["bulk","💰 Pricing"]].map(([tab,label])=>(
-              <button key={tab} style={{...bP,border:"none",borderBottom:adminTab===tab?"3px solid "+C.darkGreen:"3px solid transparent",borderRadius:"6px 6px 0 0",background:adminTab===tab?C.cream:"transparent",color:adminTab===tab?C.darkGreen:C.textLight,padding:"8px 16px",fontSize:13,fontWeight:adminTab===tab?700:400,position:"relative"}} onClick={()=>setAdminTab(tab)}>
-                {label}{tab==="orders"&&oc.Pending>0&&<span style={{marginLeft:6,background:"#e8762a",color:"#fff",borderRadius:10,padding:"1px 6px",fontSize:10,fontWeight:700}}>{oc.Pending}</span>}
+          <div style={{ display: "flex", gap: 4, marginBottom: "1.5rem", borderBottom: "2px solid " + C.border }}>
+            {[["orders", "📦 Orders"], ["products", "🌱 Products"], ["bulk", "💰 Pricing"]].map(([tab, label]) => (
+              <button key={tab} style={{ ...bP, border: "none", borderBottom: adminTab === tab ? "3px solid " + C.darkGreen : "3px solid transparent", borderRadius: "6px 6px 0 0", background: adminTab === tab ? C.cream : "transparent", color: adminTab === tab ? C.darkGreen : C.textLight, padding: "8px 16px", fontSize: 13, fontWeight: adminTab === tab ? 700 : 400, position: "relative" }} onClick={() => setAdminTab(tab)}>
+                {label}{tab === "orders" && oc.Pending > 0 && <span style={{ marginLeft: 6, background: "#e8762a", color: "#fff", borderRadius: 10, padding: "1px 6px", fontSize: 10, fontWeight: 700 }}>{oc.Pending}</span>}
               </button>
             ))}
           </div>
 
-          {adminTab==="orders"&&<div>
-            <div style={{display:"flex",gap:6,marginBottom:"1rem",flexWrap:"wrap"}}>
-              {Object.entries(oc).map(([s,count])=>(
-                <button key={s} style={{...bP,padding:"5px 12px",fontSize:12,background:orderFilter===s?C.darkGreen:C.parchment,color:orderFilter===s?"#fff":C.brown}} onClick={()=>setOrderFilter(s)}>{s} ({count})</button>
+          {adminTab === "orders" && <div>
+            <div style={{ display: "flex", gap: 6, marginBottom: "1rem", flexWrap: "wrap" }}>
+              {Object.entries(oc).map(([s, count]) => (
+                <button key={s} style={{ ...bP, padding: "5px 12px", fontSize: 12, background: orderFilter === s ? C.darkGreen : C.parchment, color: orderFilter === s ? "#fff" : C.brown }} onClick={() => setOrderFilter(s)}>{s} ({count})</button>
               ))}
             </div>
-            {filteredOrders.length===0&&<div style={{textAlign:"center",padding:"3rem",color:C.textLight}}><p style={{fontSize:32,margin:"0 0 0.5rem"}}>📭</p><p>No orders yet</p></div>}
-            {filteredOrders.map(o=>{
-              const sc=SC[o.status]||SC.Pending;
-              const isExp=expandedOrder===o.id;
-              return(
-                <div key={o.id} style={{background:"#fff",border:"1px solid "+C.border,borderRadius:10,marginBottom:10,overflow:"hidden"}}>
-                  <div style={{padding:"12px 14px",display:"flex",alignItems:"center",gap:10,cursor:"pointer"}} onClick={()=>setExpandedOrder(isExp?null:o.id)}>
-                    <div style={{flex:1,minWidth:0}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
-                        <p style={{margin:0,fontWeight:700,fontSize:14,color:C.text}}>{o.customer.name}</p>
-                        <span style={{fontSize:11,padding:"2px 8px",borderRadius:10,background:sc.bg,color:sc.color,border:"1px solid "+sc.border,fontWeight:600}}>{o.status}</span>
-                        <span style={{fontSize:11,color:C.textLight}}>{o.id}</span>
+            {filteredOrders.length === 0 && <div style={{ textAlign: "center", padding: "3rem", color: C.textLight }}><p style={{ fontSize: 32, margin: "0 0 0.5rem" }}>📭</p><p>No orders yet</p></div>}
+            {filteredOrders.map(o => {
+              const sc = SC[o.status] || SC.Pending;
+              const isExp = expandedOrder === o.id;
+              return (
+                <div key={o.id} style={{ background: "#fff", border: "1px solid " + C.border, borderRadius: 10, marginBottom: 10, overflow: "hidden" }}>
+                  <div style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }} onClick={() => setExpandedOrder(isExp ? null : o.id)}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                        <p style={{ margin: 0, fontWeight: 700, fontSize: 14, color: C.text }}>{o.customer.name}</p>
+                        <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, background: sc.bg, color: sc.color, border: "1px solid " + sc.border, fontWeight: 600 }}>{o.status}</span>
+                        <span style={{ fontSize: 11, color: C.textLight }}>{o.id}</span>
                       </div>
-                      <p style={{margin:"2px 0 0",fontSize:12,color:C.textLight}}>{o.date} · {o.items.length} item{o.items.length!==1?"s":""} · <strong style={{color:C.darkGreen}}>R{o.total.toFixed(2)}</strong> · 📞 {o.customer.phone}</p>
+                      <p style={{ margin: "2px 0 0", fontSize: 12, color: C.textLight }}>{o.date} · {o.items.length} item{o.items.length !== 1 ? "s" : ""} · <strong style={{ color: C.darkGreen }}>R{o.total.toFixed(2)}</strong> · 📞 {o.customer.phone}</p>
                     </div>
-                    <span style={{fontSize:18,color:C.textLight}}>{isExp?"▲":"▼"}</span>
+                    <span style={{ fontSize: 18, color: C.textLight }}>{isExp ? "▲" : "▼"}</span>
                   </div>
-                  {isExp&&<div style={{borderTop:"1px solid "+C.border,padding:"14px"}}>
-                    <div style={{background:C.parchment,borderRadius:8,padding:"10px",marginBottom:12}}>
-                      {o.items.map((it,i)=>(
-                        <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",borderBottom:i<o.items.length-1?"1px solid "+C.border:"none"}}>
-                          {it.image&&<img src={it.image} alt={it.name} style={{width:32,height:32,objectFit:"cover",borderRadius:4}} onError={e=>e.target.style.display="none"}/>}
-                          <span style={{flex:1,fontSize:13}}>{it.qty}x {it.name}</span>
-                          <span style={{fontSize:13,fontWeight:600,color:C.darkGreen}}>R{(it.price*it.qty).toFixed(2)}</span>
+                  {isExp && <div style={{ borderTop: "1px solid " + C.border, padding: "14px" }}>
+                    <div style={{ background: C.parchment, borderRadius: 8, padding: "10px", marginBottom: 12 }}>
+                      {o.items.map((it, i) => (
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", borderBottom: i < o.items.length - 1 ? "1px solid " + C.border : "none" }}>
+                          {it.image && <img src={it.image} alt={it.name} style={{ width: 32, height: 32, objectFit: "cover", borderRadius: 4 }} onError={e => e.target.style.display = "none"} />}
+                          <span style={{ flex: 1, fontSize: 13 }}>{it.qty}x {it.name}</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: C.darkGreen }}>R{(it.price * it.qty).toFixed(2)}</span>
                         </div>
                       ))}
-                      <div style={{borderTop:"1px solid "+C.border,marginTop:6,paddingTop:6}}>
-                        <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:C.textMid,padding:"2px 0"}}><span>Seeds subtotal</span><span>R{o.seedsTotal?o.seedsTotal.toFixed(2):"—"}</span></div>
-                        <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:C.textMid,padding:"2px 0"}}><span>Pudo delivery</span><span>R{PUDO_FEE}.00</span></div>
-                        <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:C.textMid,padding:"2px 0"}}><span>Packaging</span><span>R{PACKAGING_FEE}.00</span></div>
-                        <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,fontSize:14,padding:"4px 0 0"}}><span>Total paid</span><span style={{color:C.darkGreen}}>R{o.total.toFixed(2)}</span></div>
+                      <div style={{ borderTop: "1px solid " + C.border, marginTop: 6, paddingTop: 6 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: C.textMid, padding: "2px 0" }}><span>Seeds subtotal</span><span>R{o.seedsTotal ? o.seedsTotal.toFixed(2) : "—"}</span></div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: C.textMid, padding: "2px 0" }}><span>Pudo delivery</span><span>R{PUDO_FEE}.00</span></div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: C.textMid, padding: "2px 0" }}><span>Packaging</span><span>R{PACKAGING_FEE}.00</span></div>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 14, padding: "4px 0 0" }}><span>Total paid</span><span style={{ color: C.darkGreen }}>R{o.total.toFixed(2)}</span></div>
                       </div>
                     </div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12,fontSize:12,color:C.textMid}}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12, fontSize: 12, color: C.textMid }}>
                       <div><strong>Email:</strong> {o.customer.email}</div>
                       <div><strong>Phone:</strong> {o.customer.phone}</div>
-                      <div style={{gridColumn:"1/-1"}}><strong>Address:</strong> {o.customer.street}, {o.customer.suburb}, {o.customer.city}, {o.customer.province} {o.customer.postal}</div>
+                      <div style={{ gridColumn: "1/-1" }}><strong>Address:</strong> {o.customer.street}, {o.customer.suburb}, {o.customer.city}, {o.customer.province} {o.customer.postal}</div>
                     </div>
-                    <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
-                      {["Pending","Packed","Dispatched","Delivered"].map(s=>(
-                        <button key={s} style={{...bP,padding:"5px 12px",fontSize:12,background:o.status===s?SC[s].bg:C.parchment,color:o.status===s?SC[s].color:C.brown,border:"1px solid "+(o.status===s?SC[s].border:C.border),fontWeight:o.status===s?700:400}} onClick={()=>updateOrderStatus(o.id,s)}>{s}</button>
+                    <div style={{ display: "flex", gap: 6, marginBottom: 10, flexWrap: "wrap" }}>
+                      {["Pending", "Packed", "Dispatched", "Delivered"].map(s => (
+                        <button key={s} style={{ ...bP, padding: "5px 12px", fontSize: 12, background: o.status === s ? SC[s].bg : C.parchment, color: o.status === s ? SC[s].color : C.brown, border: "1px solid " + (o.status === s ? SC[s].border : C.border), fontWeight: o.status === s ? 700 : 400 }} onClick={() => updateOrderStatus(o.id, s)}>{s}</button>
                       ))}
                     </div>
-                    <input style={{...iS,marginBottom:8}} placeholder="Pudo tracking reference..." value={o.pudoRef} onChange={e=>updateOrderField(o.id,"pudoRef",e.target.value)}/>
-                    <textarea style={{...iS,height:60,resize:"vertical"}} placeholder="Internal notes..." value={o.notes} onChange={e=>updateOrderField(o.id,"notes",e.target.value)}/>
-                    <div style={{display:"flex",gap:8,marginTop:10}}>
-                      <a href={"https://wa.me/27"+o.customer.phone.replace(/\D/g,"").replace(/^0/,"")} target="_blank" rel="noreferrer" style={{...bG,textDecoration:"none",background:"#25D366",padding:"7px 14px",fontSize:12}}>💬 WhatsApp</a>
-                      <a href={"mailto:"+o.customer.email} style={{...bP,textDecoration:"none",padding:"7px 14px",fontSize:12}}>✉️ Email</a>
-                      <button style={{...bG,background:"#b00",marginLeft:"auto",padding:"7px 12px",fontSize:12}} onClick={()=>deleteOrder(o.id)}>Delete</button>
+                    <input style={{ ...iS, marginBottom: 8 }} placeholder="Pudo tracking reference..." value={o.pudoRef} onChange={e => updateOrderField(o.id, "pudoRef", e.target.value)} />
+                    <textarea style={{ ...iS, height: 60, resize: "vertical" }} placeholder="Internal notes..." value={o.notes} onChange={e => updateOrderField(o.id, "notes", e.target.value)} />
+                    <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                      <a href={"https://wa.me/27" + o.customer.phone.replace(/\D/g, "").replace(/^0/, "")} target="_blank" rel="noreferrer" style={{ ...bG, textDecoration: "none", background: "#25D366", padding: "7px 14px", fontSize: 12 }}>💬 WhatsApp</a>
+                      <a href={"mailto:" + o.customer.email} style={{ ...bP, textDecoration: "none", padding: "7px 14px", fontSize: 12 }}>✉️ Email</a>
+                      <button style={{ ...bG, background: "#b00", marginLeft: "auto", padding: "7px 12px", fontSize: 12 }} onClick={() => deleteOrder(o.id)}>Delete</button>
                     </div>
                   </div>}
                 </div>
@@ -606,127 +673,163 @@ export default function App() {
             })}
           </div>}
 
-          {adminTab==="products"&&<div>
-            <button style={{...bG,background:"#2d5a8e",marginBottom:"1rem"}} onClick={addNew}>+ Add product</button>
-            {products.map(p=>(
-              <div key={p.id} style={{background:"#fff",border:"1px solid "+C.border,borderRadius:8,padding:"9px 12px",display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-                {p.image&&<img src={p.image} alt={p.name} style={{width:40,height:40,objectFit:"cover",borderRadius:6,flexShrink:0}} onError={e=>e.target.style.display="none"}/>}
-                <div style={{flex:1,minWidth:0}}>
-                  <p style={{margin:0,fontWeight:600,fontSize:13,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</p>
-                  <p style={{margin:0,fontSize:11,color:C.textLight}}>{p.category} · R{p.price} · Profit: R{p.price-p.cost}</p>
+          {adminTab === "products" && <div>
+            <button style={{ ...bG, background: "#2d5a8e", marginBottom: "1rem" }} onClick={addNew}>+ Add product</button>
+            {products.map(p => (
+              <div key={p.id} style={{ background: "#fff", border: "1px solid " + C.border, borderRadius: 8, padding: "9px 12px", display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                {p.image && <img src={p.image} alt={p.name} style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 6, flexShrink: 0 }} onError={e => e.target.style.display = "none"} />}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontWeight: 600, fontSize: 13, color: C.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.name}</p>
+                  <p style={{ margin: 0, fontSize: 11, color: C.textLight }}>{p.category} · R{p.price} · Profit: R{p.price - p.cost}</p>
                 </div>
-                <button style={{fontSize:11,padding:"3px 8px",borderRadius:8,border:"none",cursor:"pointer",background:p.outOfStock?"#c00":"#eef5e8",color:p.outOfStock?"#fff":C.midGreen,fontWeight:600}} onClick={()=>setProducts(ps=>ps.map(x=>x.id===p.id?{...x,outOfStock:!x.outOfStock}:x))}>{p.outOfStock?"In stock":"Out of stock"}</button>
-                <span style={{fontSize:11,padding:"2px 8px",borderRadius:10,background:p.stock?"#eef5e8":"#fce8e8",color:p.stock?C.midGreen:"#c00"}}>{p.stock?"Live":"Hidden"}</span>
-                <button style={{...bG,padding:"5px 12px",fontSize:12}} onClick={()=>startEdit(p)}>Edit</button>
-                <button style={{...bG,background:"#b00",padding:"5px 9px",fontSize:12}} onClick={()=>del(p.id)}>x</button>
+                <button style={{ fontSize: 11, padding: "3px 8px", borderRadius: 8, border: "none", cursor: "pointer", background: p.outOfStock ? "#c00" : "#eef5e8", color: p.outOfStock ? "#fff" : C.midGreen, fontWeight: 600 }} onClick={() => setProducts(ps => ps.map(x => x.id === p.id ? { ...x, outOfStock: !x.outOfStock } : x))}>{p.outOfStock ? "In stock" : "Out of stock"}</button>
+                <span style={{ fontSize: 11, padding: "2px 8px", borderRadius: 10, background: p.stock ? "#eef5e8" : "#fce8e8", color: p.stock ? C.midGreen : "#c00" }}>{p.stock ? "Live" : "Hidden"}</span>
+                <button style={{ ...bG, padding: "5px 12px", fontSize: 12 }} onClick={() => startEdit(p)}>Edit</button>
+                <button style={{ ...bG, background: "#b00", padding: "5px 9px", fontSize: 12 }} onClick={() => del(p.id)}>x</button>
               </div>
             ))}
           </div>}
 
-          {adminTab==="bulk"&&<div>
-            <div style={{background:C.parchment,border:"1px solid "+C.border,borderRadius:10,padding:"1.25rem",maxWidth:480}}>
-              <h3 style={{margin:"0 0 1rem",color:C.darkGreen,fontSize:15}}>Bulk price update</h3>
-              <label style={{fontSize:12,color:C.textMid,display:"block",marginBottom:4}}>Category</label>
-              <select style={{...iS,marginBottom:12}} value={bulkCat} onChange={e=>setBulkCat(e.target.value)}>{CATS.map(c=><option key={c}>{c}</option>)}</select>
-              <label style={{fontSize:12,color:C.textMid,display:"block",marginBottom:4}}>New retail price (R)</label>
-              <input style={{...iS,marginBottom:12}} type="number" placeholder="e.g. 50" value={bulkPrice} onChange={e=>setBulkPrice(e.target.value)}/>
-              <button style={{...bG,width:"100%",padding:12}} onClick={applyBulk}>Apply to {bulkCat==="All"?products.length:products.filter(p=>p.category===bulkCat).length} products</button>
+          {adminTab === "bulk" && <div>
+            <div style={{ background: C.parchment, border: "1px solid " + C.border, borderRadius: 10, padding: "1.25rem", maxWidth: 480 }}>
+              <h3 style={{ margin: "0 0 1rem", color: C.darkGreen, fontSize: 15 }}>Bulk price update</h3>
+              <label style={{ fontSize: 12, color: C.textMid, display: "block", marginBottom: 4 }}>Category</label>
+              <select style={{ ...iS, marginBottom: 12 }} value={bulkCat} onChange={e => setBulkCat(e.target.value)}>{CATS.map(c => <option key={c}>{c}</option>)}</select>
+              <label style={{ fontSize: 12, color: C.textMid, display: "block", marginBottom: 4 }}>New retail price (R)</label>
+              <input style={{ ...iS, marginBottom: 12 }} type="number" placeholder="e.g. 50" value={bulkPrice} onChange={e => setBulkPrice(e.target.value)} />
+              <button style={{ ...bG, width: "100%", padding: 12 }} onClick={applyBulk}>Apply to {bulkCat === "All" ? products.length : products.filter(p => p.category === bulkCat).length} products</button>
             </div>
           </div>}
         </div>
       ))}
 
-      {editId&&(
-        <div style={mS} onClick={e=>e.target===e.currentTarget&&setEditId(null)}>
+      {/* ── Edit product modal ───────────────────────────────────────────────── */}
+      {editId && (
+        <div style={mS} onClick={e => e.target === e.currentTarget && setEditId(null)}>
           <div style={bxS}>
-            <h3 style={{margin:"0 0 1rem",color:C.darkGreen}}>Edit product</h3>
-            {[["Name","name","text"],["Cost price (R)","cost","number"],["Retail price (R)","price","number"],["Image URL","image","text"]].map(([label,key,type])=>(
-              <div key={key}><label style={{fontSize:12,color:C.textMid,display:"block",marginBottom:3,marginTop:10}}>{label}</label><input style={iS} type={type} value={editData[key]||""} onChange={e=>setEditData(d=>({...d,[key]:e.target.value}))}/></div>
+            <h3 style={{ margin: "0 0 1rem", color: C.darkGreen }}>Edit product</h3>
+            {[["Name", "name", "text"], ["Cost price (R)", "cost", "number"], ["Retail price (R)", "price", "number"], ["Image URL", "image", "text"]].map(([label, key, type]) => (
+              <div key={key}><label style={{ fontSize: 12, color: C.textMid, display: "block", marginBottom: 3, marginTop: 10 }}>{label}</label><input style={iS} type={type} value={editData[key] || ""} onChange={e => setEditData(d => ({ ...d, [key]: e.target.value }))} /></div>
             ))}
-            <label style={{fontSize:12,color:C.textMid,display:"block",marginBottom:3,marginTop:10}}>Category</label>
-            <select style={iS} value={editData.category||""} onChange={e=>setEditData(d=>({...d,category:e.target.value}))}>{CATS.filter(c=>c!=="All").map(c=><option key={c}>{c}</option>)}</select>
-            {editData.price&&editData.cost&&<p style={{fontSize:11,color:C.textLight,margin:"4px 0 0"}}>Profit: R{editData.price-editData.cost} per pack</p>}
-            <label style={{fontSize:12,color:C.textMid,display:"flex",alignItems:"center",gap:6,marginTop:10,cursor:"pointer"}}><input type="checkbox" checked={editData.stock||false} onChange={e=>setEditData(d=>({...d,stock:e.target.checked}))}/> Show in store</label>
-            <label style={{fontSize:12,color:"#c00",display:"flex",alignItems:"center",gap:6,marginTop:8,cursor:"pointer"}}><input type="checkbox" checked={editData.outOfStock||false} onChange={e=>setEditData(d=>({...d,outOfStock:e.target.checked}))}/> Mark as out of stock</label>
-            <div style={{display:"flex",gap:8,marginTop:14}}>
-              <button style={{...bP,flex:1}} onClick={()=>setEditId(null)}>Cancel</button>
-              <button style={{...bG,flex:1}} onClick={saveEdit}>Save changes</button>
+            <label style={{ fontSize: 12, color: C.textMid, display: "block", marginBottom: 3, marginTop: 10 }}>Category</label>
+            <select style={iS} value={editData.category || ""} onChange={e => setEditData(d => ({ ...d, category: e.target.value }))}>{CATS.filter(c => c !== "All").map(c => <option key={c}>{c}</option>)}</select>
+            {editData.price && editData.cost && <p style={{ fontSize: 11, color: C.textLight, margin: "4px 0 0" }}>Profit: R{editData.price - editData.cost} per pack</p>}
+            <label style={{ fontSize: 12, color: C.textMid, display: "flex", alignItems: "center", gap: 6, marginTop: 10, cursor: "pointer" }}><input type="checkbox" checked={editData.stock || false} onChange={e => setEditData(d => ({ ...d, stock: e.target.checked }))} /> Show in store</label>
+            <label style={{ fontSize: 12, color: "#c00", display: "flex", alignItems: "center", gap: 6, marginTop: 8, cursor: "pointer" }}><input type="checkbox" checked={editData.outOfStock || false} onChange={e => setEditData(d => ({ ...d, outOfStock: e.target.checked }))} /> Mark as out of stock</label>
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button style={{ ...bP, flex: 1 }} onClick={() => setEditId(null)}>Cancel</button>
+              <button style={{ ...bG, flex: 1 }} onClick={saveEdit}>Save changes</button>
             </div>
           </div>
         </div>
       )}
 
-      {cartOpen&&(
-        <div style={mS} onClick={e=>e.target===e.currentTarget&&closeCart()}>
+      {/* ── Cart modal ───────────────────────────────────────────────────────── */}
+      {cartOpen && (
+        <div style={mS} onClick={e => e.target === e.currentTarget && closeCart()}>
           <div style={bxS}>
-            {step===0&&<div>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"1rem"}}>
-                <h3 style={{margin:0,color:C.darkGreen}}>Your cart</h3>
-                <button style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:C.textLight}} onClick={closeCart}>✕</button>
+
+            {/* Progress bar — shown on steps 1 and 2 */}
+            {step > 0 && <ProgressBar step={step} />}
+
+            {/* ── Step 0: Cart ── */}
+            {step === 0 && <div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
+                <h3 style={{ margin: 0, color: C.darkGreen }}>Your cart</h3>
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  {cart.length > 0 && <button style={{ background: "none", border: "none", fontSize: 11, color: C.textLight, cursor: "pointer", textDecoration: "underline" }} onClick={clearCart}>Clear all</button>}
+                  <button style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.textLight }} onClick={closeCart}>✕</button>
+                </div>
               </div>
-              {cart.length===0?<p style={{color:C.textLight,textAlign:"center",padding:"2rem 0"}}>Your cart is empty</p>:(
+              {cart.length === 0 ? <p style={{ color: C.textLight, textAlign: "center", padding: "2rem 0" }}>Your cart is empty</p> : (
                 <div>
-                  {cart.map(x=>(
-                    <div key={x.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderBottom:"1px solid "+C.border}}>
-                      {x.image&&<img src={x.image} alt={x.name} style={{width:36,height:36,objectFit:"cover",borderRadius:6}} onError={e=>e.target.style.display="none"}/>}
-                      <span style={{flex:1,fontSize:13}}>{x.name}</span>
-                      <button style={{background:"none",border:"1px solid "+C.border,borderRadius:5,width:24,height:24,cursor:"pointer"}} onClick={()=>setCart(c=>c.map(i=>i.id===x.id?{...i,qty:Math.max(0,i.qty-1)}:i).filter(i=>i.qty>0))}>-</button>
-                      <span style={{width:18,textAlign:"center",fontSize:13}}>{x.qty}</span>
-                      <button style={{background:"none",border:"1px solid "+C.border,borderRadius:5,width:24,height:24,cursor:"pointer"}} onClick={()=>setCart(c=>c.map(i=>i.id===x.id?{...i,qty:i.qty+1}:i))}>+</button>
-                      <span style={{minWidth:60,textAlign:"right",fontWeight:700,color:C.darkGreen,fontSize:13}}>R{(x.price*x.qty).toFixed(2)}</span>
+                  {cart.map(x => (
+                    <div key={x.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderBottom: "1px solid " + C.border }}>
+                      {x.image && <img src={x.image} alt={x.name} style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 6 }} onError={e => e.target.style.display = "none"} />}
+                      <span style={{ flex: 1, fontSize: 13 }}>{x.name}</span>
+                      <button style={{ background: "none", border: "1px solid " + C.border, borderRadius: 5, width: 24, height: 24, cursor: "pointer" }} onClick={() => updateCartQty(x.id, -1)}>-</button>
+                      <span style={{ width: 18, textAlign: "center", fontSize: 13 }}>{x.qty}</span>
+                      <button style={{ background: "none", border: "1px solid " + C.border, borderRadius: 5, width: 24, height: 24, cursor: "pointer" }} onClick={() => updateCartQty(x.id, 1)}>+</button>
+                      <span style={{ minWidth: 60, textAlign: "right", fontWeight: 700, color: C.darkGreen, fontSize: 13 }}>R{(x.price * x.qty).toFixed(2)}</span>
                     </div>
                   ))}
-                  <div style={{marginTop:10,borderTop:"1px solid "+C.border,paddingTop:8}}>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:13,color:C.textMid,padding:"3px 0"}}><span>Seeds subtotal</span><span>R{seedsTotal.toFixed(2)}</span></div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:13,color:C.textMid,padding:"3px 0"}}><span>📦 Pudo delivery</span><span>R{PUDO_FEE}.00</span></div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontSize:13,color:C.textMid,padding:"3px 0",borderBottom:"1px solid "+C.border,paddingBottom:8}}><span>🛡️ Packaging</span><span>R{PACKAGING_FEE}.00</span></div>
-                    <div style={{display:"flex",justifyContent:"space-between",fontWeight:700,fontSize:15,paddingTop:8}}><span>Total</span><span style={{color:C.darkGreen}}>R{cartTotal.toFixed(2)}</span></div>
+                  <div style={{ marginTop: 10, borderTop: "1px solid " + C.border, paddingTop: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: C.textMid, padding: "3px 0" }}><span>Seeds subtotal</span><span>R{seedsTotal.toFixed(2)}</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: C.textMid, padding: "3px 0" }}><span>📦 Pudo delivery</span><span>R{PUDO_FEE}.00</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: C.textMid, padding: "3px 0", borderBottom: "1px solid " + C.border, paddingBottom: 8 }}><span>🛡️ Packaging</span><span>R{PACKAGING_FEE}.00</span></div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 15, paddingTop: 8 }}><span>Total</span><span style={{ color: C.darkGreen }}>R{cartTotal.toFixed(2)}</span></div>
                   </div>
-                  <div style={{...pN,marginTop:10}}>📦 Delivery via Pudo Locker — collect from a locker near you.</div>
-                  <div style={{display:"flex",gap:8,marginTop:12}}>
-                    <button style={{...bP,flex:1}} onClick={closeCart}>Cancel</button>
-                    <button style={{...bG,flex:1}} onClick={()=>setStep(1)}>Checkout →</button>
+                  <div style={{ ...pN, marginTop: 10 }}>📦 Delivery via Pudo Locker — collect from a locker near you.</div>
+                  {/* Sticky footer */}
+                  <div style={stickyFooter}>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button style={{ ...bP, flex: 1 }} onClick={closeCart}>Cancel</button>
+                      <button style={{ ...bG, flex: 2 }} onClick={() => setStep(1)}>Checkout →</button>
+                    </div>
                   </div>
                 </div>
               )}
             </div>}
-            {step===1&&<div>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"0.25rem"}}>
-                <h3 style={{margin:0,color:C.darkGreen}}>Your details</h3>
-                <button style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:C.textLight}} onClick={closeCart}>✕</button>
+
+            {/* ── Step 1: Details ── */}
+            {step === 1 && <div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.25rem" }}>
+                <h3 style={{ margin: 0, color: C.darkGreen }}>Your details</h3>
+                <button style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.textLight }} onClick={closeCart}>✕</button>
               </div>
-              <p style={{fontSize:12,color:C.textLight,margin:"0 0 0.75rem"}}>So we can confirm and arrange your Pudo delivery</p>
-              {[["Full name","name","text","Jane Smith"],["Phone / WhatsApp","phone","tel","+27 82 000 0000"],["Email address","email","email","you@example.com"]].map(([l,k,t,ph])=>(
-                <div key={k}><label style={{fontSize:12,color:C.textMid,display:"block",marginBottom:3,marginTop:10}}>{l}</label><input style={iS} type={t} placeholder={ph} value={cust[k]} onChange={e=>setCust(d=>({...d,[k]:e.target.value}))}/></div>
+              <p style={{ fontSize: 12, color: C.textLight, margin: "0 0 0.75rem" }}>
+                {cust.name ? `Welcome back, ${cust.name.split(" ")[0]}! Your details are pre-filled.` : "So we can confirm and arrange your Pudo delivery"}
+              </p>
+              {[["Full name", "name", "text", "Jane Smith"], ["Phone / WhatsApp", "phone", "tel", "+27 82 000 0000"], ["Email address", "email", "email", "you@example.com"]].map(([l, k, t, ph]) => (
+                <div key={k}><label style={{ fontSize: 12, color: C.textMid, display: "block", marginBottom: 3, marginTop: 10 }}>{l}</label><input style={iS} type={t} placeholder={ph} value={cust[k]} onChange={e => saveCust({ ...cust, [k]: e.target.value })} /></div>
               ))}
-              <p style={{fontSize:12,fontWeight:600,color:C.darkGreen,margin:"14px 0 4px"}}>Delivery address</p>
-              {[["Street address","street","123 Main Street"],["Suburb","suburb","Sandton"],["City","city","Johannesburg"],["Province","province","Gauteng"],["Postal code","postal","2196"]].map(([l,k,ph])=>(
-                <div key={k}><label style={{fontSize:12,color:C.textMid,display:"block",marginBottom:3,marginTop:8}}>{l}</label><input style={iS} placeholder={ph} value={cust[k]} onChange={e=>setCust(d=>({...d,[k]:e.target.value}))}/></div>
+              <p style={{ fontSize: 12, fontWeight: 600, color: C.darkGreen, margin: "14px 0 4px" }}>Delivery address</p>
+              {[["Street address", "street", "123 Main Street"], ["Suburb", "suburb", "Sandton"], ["City", "city", "Johannesburg"], ["Province", "province", "Gauteng"], ["Postal code", "postal", "2196"]].map(([l, k, ph]) => (
+                <div key={k}><label style={{ fontSize: 12, color: C.textMid, display: "block", marginBottom: 3, marginTop: 8 }}>{l}</label><input style={iS} placeholder={ph} value={cust[k]} onChange={e => saveCust({ ...cust, [k]: e.target.value })} /></div>
               ))}
-              <div style={{...pN,marginTop:12}}>📦 We will send your seeds to the nearest Pudo locker. You will receive an SMS when ready.</div>
-              <div style={{display:"flex",gap:8,marginTop:14}}>
-                <button style={{...bP,flex:1}} onClick={()=>setStep(0)}>← Back</button>
-                <button style={{...bG,flex:1}} onClick={()=>setStep(2)} disabled={!cust.name||!cust.phone||!cust.street}>Review order →</button>
-              </div>
-            </div>}
-            {step===2&&<div>
-              <h3 style={{margin:"0 0 0.75rem",color:C.darkGreen}}>Review and pay</h3>
-              <div style={{background:C.parchment,border:"1px solid "+C.border,borderRadius:8,padding:"0.75rem",marginBottom:"0.75rem"}}>
-                {cart.map(x=><div key={x.id} style={{display:"flex",justifyContent:"space-between",fontSize:13,padding:"3px 0"}}><span>{x.qty}x {x.name}</span><span style={{fontWeight:600}}>R{(x.price*x.qty).toFixed(2)}</span></div>)}
-                <div style={{borderTop:"1px solid "+C.border,marginTop:6,paddingTop:6}}>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:13,color:C.textMid,padding:"2px 0"}}><span>Seeds subtotal</span><span>R{seedsTotal.toFixed(2)}</span></div>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:13,color:C.textMid,padding:"2px 0"}}><span>📦 Pudo delivery</span><span>R{PUDO_FEE}.00</span></div>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:13,color:C.textMid,padding:"2px 0"}}><span>🛡️ Packaging</span><span>R{PACKAGING_FEE}.00</span></div>
+              <div style={{ ...pN, marginTop: 12 }}>📦 We will send your seeds to the nearest Pudo locker. You will receive an SMS when ready.</div>
+              {/* Sticky footer */}
+              <div style={stickyFooter}>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button style={{ ...bP, flex: 1 }} onClick={() => setStep(0)}>← Back</button>
+                  <button style={{ ...bG, flex: 2 }} onClick={() => setStep(2)} disabled={!cust.name || !cust.phone || !cust.street}>Review order →</button>
                 </div>
-                <div style={{borderTop:"1px solid "+C.border,marginTop:6,paddingTop:6,display:"flex",justifyContent:"space-between",fontWeight:700,fontSize:15}}><span>Total</span><span style={{color:C.darkGreen}}>R{cartTotal.toFixed(2)}</span></div>
               </div>
-              <div style={{background:"#fff8e8",border:"1px solid #e8d08a",borderRadius:8,padding:"0.8rem",fontSize:12,color:C.brown,marginBottom:"0.9rem",lineHeight:1.7}}>
-                Clicking Pay now opens a secure YOCO payment page with the exact amount pre-filled. Your order is saved automatically and you will receive a confirmation email.
-              </div>
-              {payError&&<p style={{fontSize:12,color:"#c00",margin:"0 0 8px"}}>{payError}</p>}
-              <button style={{...bG,width:"100%",padding:12,fontSize:14,marginBottom:8,opacity:payLoading?0.7:1}} onClick={handlePay} disabled={payLoading}>{payLoading?"Saving order...":"Pay R"+cartTotal.toFixed(2)+" securely via YOCO →"}</button>
-              <button style={{...bP,width:"100%"}} onClick={()=>setStep(1)}>← Back</button>
             </div>}
+
+            {/* ── Step 2: Review & Pay ── */}
+            {step === 2 && <div>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.75rem" }}>
+                <h3 style={{ margin: 0, color: C.darkGreen }}>Review and pay</h3>
+                <button style={{ background: "none", border: "none", fontSize: 22, cursor: "pointer", color: C.textLight }} onClick={closeCart}>✕</button>
+              </div>
+              <div style={{ background: C.parchment, border: "1px solid " + C.border, borderRadius: 8, padding: "0.75rem", marginBottom: "0.75rem" }}>
+                {cart.map(x => <div key={x.id} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "3px 0" }}><span>{x.qty}x {x.name}</span><span style={{ fontWeight: 600 }}>R{(x.price * x.qty).toFixed(2)}</span></div>)}
+                <div style={{ borderTop: "1px solid " + C.border, marginTop: 6, paddingTop: 6 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: C.textMid, padding: "2px 0" }}><span>Seeds subtotal</span><span>R{seedsTotal.toFixed(2)}</span></div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: C.textMid, padding: "2px 0" }}><span>📦 Pudo delivery</span><span>R{PUDO_FEE}.00</span></div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: C.textMid, padding: "2px 0" }}><span>🛡️ Packaging</span><span>R{PACKAGING_FEE}.00</span></div>
+                </div>
+                <div style={{ borderTop: "1px solid " + C.border, marginTop: 6, paddingTop: 6, display: "flex", justifyContent: "space-between", fontWeight: 700, fontSize: 15 }}><span>Total</span><span style={{ color: C.darkGreen }}>R{cartTotal.toFixed(2)}</span></div>
+              </div>
+              {/* Delivery summary */}
+              <div style={{ background: "#f0f5ff", border: "1px solid #c0d0f0", borderRadius: 8, padding: "0.75rem", fontSize: 12, color: "#2a3a6a", marginBottom: "0.75rem", lineHeight: 1.6 }}>
+                📍 <strong>Delivering to:</strong> {cust.name} · {cust.street}, {cust.suburb}, {cust.city}<br />
+                📞 {cust.phone} · ✉️ {cust.email}
+              </div>
+              <div style={{ background: "#fff8e8", border: "1px solid #e8d08a", borderRadius: 8, padding: "0.8rem", fontSize: 12, color: C.brown, marginBottom: "0.9rem", lineHeight: 1.7 }}>
+                Clicking Pay now opens a secure YOCO payment page. Your order is saved automatically and you will receive a confirmation email.
+              </div>
+              {payError && <p style={{ fontSize: 12, color: "#c00", margin: "0 0 8px" }}>{payError}</p>}
+              {/* Sticky footer */}
+              <div style={stickyFooter}>
+                <button style={{ ...bG, width: "100%", padding: 13, fontSize: 14, marginBottom: 8, opacity: payLoading ? 0.7 : 1 }} onClick={handlePay} disabled={payLoading}>
+                  {payLoading ? "Saving order..." : "🔒 Pay R" + cartTotal.toFixed(2) + " securely via YOCO →"}
+                </button>
+                <button style={{ ...bP, width: "100%" }} onClick={() => setStep(1)}>← Back</button>
+              </div>
+            </div>}
+
           </div>
         </div>
       )}
