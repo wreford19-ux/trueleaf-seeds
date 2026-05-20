@@ -396,31 +396,6 @@ export default function App() {
   const cartCount = cart.reduce((s, x) => s + x.qty, 0);
   const closeCart = () => { setCartOpen(false); setStep(0); };
 
-  const sendEmail = async order => {
-    try {
-      await fetch("https://api.emailjs.com/api/v1.0/email/send", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          service_id: EMAILJS_SERVICE,
-          template_id: EMAILJS_TEMPLATE,
-          user_id: EMAILJS_KEY,
-          template_params: {
-            order_id: order.id,
-            date: order.date,
-            customer_name: order.customer.name,
-            customer_phone: order.customer.phone,
-            customer_email: order.customer.email,
-            address: order.customer.street + ", " + order.customer.suburb + ", " + order.customer.city + ", " + order.customer.province + " " + order.customer.postal,
-            items: order.items.map(x => x.qty + "x " + x.name + " @ R" + x.price + " = R" + (x.price * x.qty).toFixed(2)).join(", "),
-            seeds_total: order.seedsTotal.toFixed(2),
-            order_total: order.total.toFixed(2),
-          }
-        })
-      });
-    } catch (e) { console.log("Email error:", e); }
-  };
-
   const handlePay = async () => {
     const newOrder = {
       id: "ORD-" + Date.now(),
@@ -433,23 +408,85 @@ export default function App() {
       pudoRef: "",
       notes: "",
     };
-    saveOrders([newOrder, ...orders]);
-    setPayLoading(true); setPayError("");
+    setPayLoading(true);
+    setPayError("");
     try {
-      const res = await fetch("/.netlify/functions/create-payment", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ amount: Math.round(cartTotal * 100) }) });
+      const res = await fetch("/.netlify/functions/create-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount: Math.round(cartTotal * 100),
+          order: newOrder,
+        })
+      });
       const data = await res.json();
       if (data.redirectUrl) {
-        sendEmail(newOrder);
+        saveOrders([newOrder, ...orders]);
         window.location.href = data.redirectUrl;
-      } else { setPayError("Payment could not be created. Please try again."); }
-    } catch { setPayError("Something went wrong. Please try again."); }
+      } else {
+        setPayError("Payment could not be created. Please try again.");
+      }
+    } catch {
+      setPayError("Something went wrong. Please try again.");
+    }
     setPayLoading(false);
   };
 
-  const updateOrderStatus = (id, status) => saveOrders(orders.map(o => o.id === id ? { ...o, status } : o));
-  const updateOrderField = (id, field, val) => saveOrders(orders.map(o => o.id === id ? { ...o, [field]: val } : o));
+  const loadServerOrders = async (pw) => {
+    try {
+      const res = await fetch("/.netlify/functions/get-orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pw })
+      });
+      const data = await res.json();
+      if (data.orders && data.orders.length > 0) {
+        const serverIds = new Set(data.orders.map(o => o.id));
+        const localOnly = orders.filter(o => !serverIds.has(o.id));
+        const merged = [...data.orders, ...localOnly]
+          .sort((a, b) => (b.id || "").localeCompare(a.id || ""));
+        setOrders(merged);
+        showToast(data.orders.length + " orders loaded from server");
+      } else {
+        showToast("No server orders found");
+      }
+    } catch (err) {
+      console.error("loadServerOrders failed:", err);
+      showToast("Showing local orders only");
+    }
+  };
+
+  const updateOrderStatus = async (id, status) => {
+    saveOrders(orders.map(o => o.id === id ? { ...o, status } : o));
+    try {
+      await fetch("/.netlify/functions/update-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: ADMIN_PW, orderId: id, updates: { status } })
+      });
+    } catch (e) { console.error("Status sync failed:", e); }
+  };
+  const updateOrderField = async (id, field, val) => {
+    saveOrders(orders.map(o => o.id === id ? { ...o, [field]: val } : o));
+    try {
+      await fetch("/.netlify/functions/update-order", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: ADMIN_PW, orderId: id, updates: { [field]: val } })
+      });
+    } catch (e) { console.error("Field sync failed:", e); }
+  };
   const deleteOrder = id => { saveOrders(orders.filter(o => o.id !== id)); showToast("Order deleted"); };
-  const handleAdminLogin = () => { if (adminPw === ADMIN_PW) { setAdminAuth(true); setAdminErr(false); } else { setAdminErr(true); setAdminPw(""); } };
+  const handleAdminLogin = () => {
+    if (adminPw === ADMIN_PW) {
+      setAdminAuth(true);
+      setAdminErr(false);
+      loadServerOrders(adminPw);
+    } else {
+      setAdminErr(true);
+      setAdminPw("");
+    }
+  };
   const startEdit = p => { setEditId(p.id); setEditData({ ...p }); };
   const saveEdit = () => { setProducts(ps => ps.map(p => p.id === editId ? { ...p, ...editData, price: Number(editData.price), cost: Number(editData.cost) } : p)); setEditId(null); showToast("Saved!"); };
   const applyBulk = () => { if (!bulkPrice) return; setProducts(ps => ps.map(p => (bulkCat === "All" || p.category === bulkCat) ? { ...p, price: Number(bulkPrice) } : p)); showToast("Applied!"); setBulkPrice(""); };
