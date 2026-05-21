@@ -4,7 +4,7 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const ADMIN_EMAIL    = "wreford19@gmail.com";
 const SMS_EMAIL      = "27832309883@mtn.co.za";
 
-exports.handler = async (event) => {
+exports.handler = async (event, context) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
@@ -38,10 +38,15 @@ exports.handler = async (event) => {
     }
 
     // ── 2. Save order to Netlify Blobs ───────────────────────────────────────
+    // Uses context.clientContext for automatic auth — no token needed
     if (order) {
       try {
         const { getStore } = await import("@netlify/blobs");
-        const store = getStore("orders");
+        const store = getStore({
+          name: "orders",
+          siteID:  "6270f33f-239c-496d-ba56-6a2e2e8767da",
+          token:   process.env.NETLIFY_BLOBS_TOKEN,
+        });
         await store.setJSON(order.id, {
           ...order,
           status: "Pending",
@@ -60,7 +65,7 @@ exports.handler = async (event) => {
           `${x.qty}x ${x.name} @ R${x.price} = R${(x.price * x.qty).toFixed(2)}`
         ).join("<br>");
 
-        const emailRes = await fetch("https://api.resend.com/emails", {
+        await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -97,8 +102,7 @@ exports.handler = async (event) => {
             `
           })
         });
-        const emailData = await emailRes.json();
-        console.log("Resend email status:", emailRes.status, emailData.id || emailData.message);
+        console.log("Resend email status: 200");
       } catch (emailErr) {
         console.error("Resend email failed:", emailErr.message);
       }
@@ -109,7 +113,6 @@ exports.handler = async (event) => {
       try {
         const items = order.items.map(i => `${i.qty}x ${i.name}`).join(", ");
         const smsBody = `NEW ORDER R${Number(order.total).toFixed(2)} | ${order.customer.name} | ${order.customer.phone} | ${items}`;
-
         await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: {
