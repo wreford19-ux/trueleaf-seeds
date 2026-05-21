@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 
-const YOCO_PUBLIC_KEY = "pk_live_13f11ae3791noe8c5334";
+
 const WA = "27832309883";
 const EMAIL = "wreford19@gmail.com";
 const PHONE = "+27 83 230 9883";
@@ -8,9 +8,7 @@ const LOGO = "https://i.ibb.co/Qj1wGkfJ/Trueleaf-Seeds-Logo.jpg";
 const ADMIN_PW = "Wreford99#";
 const PUDO_FEE = 50;
 const PACKAGING_FEE = 15;
-const EMAILJS_SERVICE = "service_e6cff14";
-const EMAILJS_TEMPLATE = "template_rhia9oj";
-const EMAILJS_KEY = "acXmr7MDPnpLcE_xJ";
+
 
 const IMGS = {
   "Alyssum Carpet White":"https://i.ibb.co/Rrk5t2T/Alyssum-White.jpg",
