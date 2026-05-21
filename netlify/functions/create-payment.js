@@ -3,6 +3,7 @@
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const ADMIN_EMAIL    = "wreford19@gmail.com";
 const SMS_EMAIL      = "27832309883@mtn.co.za";
+const SITE_ID        = "6270f33f-239c-496d-ba56-6a2e2e8767da";
 
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
@@ -38,11 +39,14 @@ exports.handler = async (event) => {
     }
 
     // ── 2. Save order to Netlify Blobs ───────────────────────────────────────
-    // No token needed — Netlify injects credentials automatically at runtime
     if (order) {
       try {
         const { getStore } = await import("@netlify/blobs");
-        const store = getStore("orders");
+        const store = getStore({
+          name:    "orders",
+          siteID:  SITE_ID,
+          token:   process.env.NETLIFY_BLOBS_TOKEN,
+        });
         await store.setJSON(order.id, {
           ...order,
           status: "Pending",
