@@ -1,10 +1,8 @@
 // netlify/functions/create-payment.js
-// REPLACE your existing file with this complete version
 
-const EMAILJS_SERVICE  = "service_e6cff14";
-const EMAILJS_TEMPLATE = "template_rhia9oj";
-const EMAILJS_KEY      = "acXmr7MDPnpLcE_xJ";
-const SMS_EMAIL        = "27832309883@mtn.co.za"; // SMS to your MTN number
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const ADMIN_EMAIL    = "wreford19@gmail.com";
+const SMS_EMAIL      = "27832309883@mtn.co.za";
 
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
@@ -55,64 +53,79 @@ exports.handler = async (event) => {
       }
     }
 
-    // ── 3. Email notification to wreford19@gmail.com ─────────────────────────
-    if (order) {
+    // ── 3. Send email notification via Resend ────────────────────────────────
+    if (order && RESEND_API_KEY) {
       try {
-        const emailRes = await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+        const items = order.items.map(x =>
+          `${x.qty}x ${x.name} @ R${x.price} = R${(x.price * x.qty).toFixed(2)}`
+        ).join("<br>");
+
+        const emailRes = await fetch("https://api.resend.com/emails", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${RESEND_API_KEY}`
+          },
           body: JSON.stringify({
-            service_id:  EMAILJS_SERVICE,
-            template_id: EMAILJS_TEMPLATE,
-            user_id:     EMAILJS_KEY,
-            template_params: {
-              order_id:       order.id,
-              date:           order.date,
-              customer_name:  order.customer.name,
-              customer_phone: order.customer.phone,
-              customer_email: order.customer.email,
-              address:        `${order.customer.street}, ${order.customer.suburb}, ${order.customer.city}, ${order.customer.province} ${order.customer.postal}`,
-              items:          order.items.map(x => `${x.qty}x ${x.name} @ R${x.price} = R${(x.price * x.qty).toFixed(2)}`).join(", "),
-              seeds_total:    Number(order.seedsTotal).toFixed(2),
-              order_total:    Number(order.total).toFixed(2),
-            }
+            from: "Trueleaf Orders <onboarding@resend.dev>",
+            to:   [ADMIN_EMAIL],
+            subject: `🌱 New Trueleaf Order - ${order.id}`,
+            html: `
+              <div style="font-family:Georgia,serif;max-width:600px;margin:0 auto;background:#f5edd8;padding:24px;border-radius:12px;">
+                <h2 style="color:#2d4a1e;margin:0 0 16px;">🌱 New Trueleaf Order</h2>
+                <table style="width:100%;font-size:14px;color:#2a2015;">
+                  <tr><td><strong>Order ID:</strong></td><td>${order.id}</td></tr>
+                  <tr><td><strong>Date:</strong></td><td>${order.date}</td></tr>
+                  <tr><td><strong>Customer:</strong></td><td>${order.customer.name}</td></tr>
+                  <tr><td><strong>Phone:</strong></td><td>${order.customer.phone}</td></tr>
+                  <tr><td><strong>Email:</strong></td><td>${order.customer.email}</td></tr>
+                  <tr><td><strong>Address:</strong></td><td>${order.customer.street}, ${order.customer.suburb}, ${order.customer.city}, ${order.customer.province} ${order.customer.postal}</td></tr>
+                </table>
+                <hr style="border:1px solid #ddd5b8;margin:16px 0;">
+                <h3 style="color:#2d4a1e;margin:0 0 8px;">Order Items</h3>
+                <p style="font-size:14px;color:#2a2015;">${items}</p>
+                <hr style="border:1px solid #ddd5b8;margin:16px 0;">
+                <table style="width:100%;font-size:14px;">
+                  <tr><td>Seeds subtotal</td><td align="right">R${Number(order.seedsTotal).toFixed(2)}</td></tr>
+                  <tr><td>Pudo delivery</td><td align="right">R50.00</td></tr>
+                  <tr><td>Packaging</td><td align="right">R15.00</td></tr>
+                  <tr style="font-weight:bold;font-size:16px;color:#2d4a1e;">
+                    <td>TOTAL PAID</td><td align="right">R${Number(order.total).toFixed(2)}</td>
+                  </tr>
+                </table>
+              </div>
+            `
           })
         });
-        console.log("EmailJS status:", emailRes.status);
+        const emailData = await emailRes.json();
+        console.log("Resend email status:", emailRes.status, emailData.id || emailData.message);
       } catch (emailErr) {
-        console.error("EmailJS failed:", emailErr.message);
+        console.error("Resend email failed:", emailErr.message);
       }
     }
 
-    // ── 4. SMS notification via email-to-SMS (MTN) ───────────────────────────
-    // Sends a short SMS to your phone the moment an order comes in
-    if (order) {
+    // ── 4. SMS via email-to-SMS (MTN) ────────────────────────────────────────
+    if (order && RESEND_API_KEY) {
       try {
         const items = order.items.map(i => `${i.qty}x ${i.name}`).join(", ");
-        const smsText = `NEW ORDER R${Number(order.total).toFixed(2)} - ${order.customer.name} - ${items}`;
-        await fetch("https://api.emailjs.com/api/v1.0/email/send", {
+        const smsBody = `NEW ORDER R${Number(order.total).toFixed(2)} | ${order.customer.name} | ${order.customer.phone} | ${items}`;
+
+        await fetch("https://api.resend.com/emails", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${RESEND_API_KEY}`
+          },
           body: JSON.stringify({
-            service_id:  EMAILJS_SERVICE,
-            template_id: EMAILJS_TEMPLATE,
-            user_id:     EMAILJS_KEY,
-            template_params: {
-              order_id:       order.id,
-              date:           order.date,
-              customer_name:  order.customer.name,
-              customer_phone: order.customer.phone,
-              customer_email: SMS_EMAIL,
-              address:        `${order.customer.suburb}, ${order.customer.city}`,
-              items:          smsText,
-              seeds_total:    Number(order.seedsTotal).toFixed(2),
-              order_total:    Number(order.total).toFixed(2),
-            }
+            from: "Trueleaf <onboarding@resend.dev>",
+            to:   [SMS_EMAIL],
+            subject: "New Order",
+            text: smsBody
           })
         });
         console.log("SMS notification sent to", SMS_EMAIL);
       } catch (smsErr) {
-        console.error("SMS notification failed:", smsErr.message);
+        console.error("SMS failed:", smsErr.message);
       }
     }
 
