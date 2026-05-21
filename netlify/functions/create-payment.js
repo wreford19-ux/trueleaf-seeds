@@ -4,7 +4,7 @@ const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const ADMIN_EMAIL    = "wreford19@gmail.com";
 const SMS_EMAIL      = "27832309883@mtn.co.za";
 
-exports.handler = async (event, context) => {
+exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
     return { statusCode: 405, body: "Method Not Allowed" };
   }
@@ -38,15 +38,11 @@ exports.handler = async (event, context) => {
     }
 
     // ── 2. Save order to Netlify Blobs ───────────────────────────────────────
-    // Uses context.clientContext for automatic auth — no token needed
+    // No token needed — Netlify injects credentials automatically at runtime
     if (order) {
       try {
         const { getStore } = await import("@netlify/blobs");
-        const store = getStore({
-          name: "orders",
-          siteID:  "6270f33f-239c-496d-ba56-6a2e2e8767da",
-          token:   process.env.NETLIFY_BLOBS_TOKEN,
-        });
+        const store = getStore("orders");
         await store.setJSON(order.id, {
           ...order,
           status: "Pending",
