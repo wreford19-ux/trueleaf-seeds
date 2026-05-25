@@ -1,8 +1,7 @@
 // netlify/functions/update-order.js
-// NEW FILE — add to your netlify/functions/ folder
-// Updates order status, pudoRef, notes from Admin panel
 
-const ADMIN_PW = process.env.ADMIN_PASSWORD || "Wreford99#";
+const ADMIN_PW = "Wreford99#";
+const SITE_ID  = "6270f33f-239c-496d-ba56-6a2e2e8767da";
 
 exports.handler = async (event) => {
   if (event.httpMethod !== "POST") {
@@ -17,7 +16,11 @@ exports.handler = async (event) => {
     }
 
     const { getStore } = await import("@netlify/blobs");
-    const store = getStore("orders");
+    const store = getStore({
+      name:   "orders",
+      siteID: SITE_ID,
+      token:  process.env.NETLIFY_BLOBS_TOKEN,
+    });
 
     const existing = await store.get(orderId, { type: "json" });
     if (!existing) {
