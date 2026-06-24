@@ -334,6 +334,7 @@ export default function App() {
   const [adminErr, setAdminErr] = useState(false);
   const [search, setSearch] = useState("");
   const [cat, setCat] = useState("All");
+  const [sort, setSort] = useState("default");
 
   // Cart persisted to localStorage
   const [cart, setCart] = useState(() => lsGet("tl_cart", []));
@@ -366,11 +367,16 @@ export default function App() {
   const saveOrders = o => { setOrders(o); lsSet("tl_orders", o); };
   const showToast = msg => { setToast(msg); setTimeout(() => setToast(""), 2500); };
 
-  const filtered = useMemo(() => products.filter(p =>
-    (cat === "All" || p.category === cat) &&
-    p.name.toLowerCase().includes(search.toLowerCase()) &&
-    p.stock
-  ), [products, cat, search]);
+  const filtered = useMemo(() => {
+    let list = products.filter(p =>
+      (cat === "All" || p.category === cat) &&
+      p.name.toLowerCase().includes(search.toLowerCase()) &&
+      p.stock
+    );
+    if (sort === "az") list = [...list].sort((a, b) => a.name.localeCompare(b.name));
+    else if (sort === "za") list = [...list].sort((a, b) => b.name.localeCompare(a.name));
+    return list;
+  }, [products, cat, search, sort]);
 
   const addCart = p => {
     if (p.outOfStock) return;
@@ -575,10 +581,33 @@ export default function App() {
             <div key={t} style={{ textAlign: "center", maxWidth: 160 }}><p style={{ margin: 0, fontWeight: 700, fontSize: 13, color: C.darkGreen }}>{t}</p><p style={{ margin: "2px 0 0", fontSize: 11, color: C.textMid }}>{d}</p></div>
           ))}
         </div>
-        <div style={{ display: "flex", gap: 8, padding: "0.75rem 1rem", flexWrap: "wrap", alignItems: "center", background: "#fff", borderBottom: "1px solid " + C.border }}>
-          <input style={{ ...iS, flex: 1, minWidth: 140 }} placeholder="Search seeds..." value={search} onChange={e => setSearch(e.target.value)} />
-          <select style={{ ...iS, width: "auto" }} value={cat} onChange={e => setCat(e.target.value)}>{CATS.map(c => <option key={c}>{c}</option>)}</select>
-          <span style={{ fontSize: 12, color: C.textLight }}>{filtered.length} products</span>
+        <div style={{ padding: "0.75rem 1rem", background: "#fff", borderBottom: "1px solid " + C.border }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 10 }}>
+            <input style={{ ...iS, flex: 1, minWidth: 140 }} placeholder="Search seeds..." value={search} onChange={e => setSearch(e.target.value)} />
+            <select style={{ ...iS, width: "auto" }} value={sort} onChange={e => setSort(e.target.value)}>
+              <option value="default">Sort: Featured</option>
+              <option value="az">Name: A–Z</option>
+              <option value="za">Name: Z–A</option>
+            </select>
+            <span style={{ fontSize: 12, color: C.textLight, whiteSpace: "nowrap" }}>{filtered.length} products</span>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {CATS.map(c => {
+              const active = cat === c;
+              const cs = CAT_STYLE[c] || { icon: "🌱" };
+              return (
+                <button key={c} onClick={() => setCat(c)} style={{
+                  padding: "5px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: "pointer",
+                  border: "1px solid " + (active ? C.darkGreen : C.border),
+                  background: active ? C.darkGreen : "#fff",
+                  color: active ? "#fff" : C.textMid,
+                  display: "inline-flex", alignItems: "center", gap: 4
+                }}>
+                  <span>{c === "All" ? "🌱" : cs.icon}</span>{c}
+                </button>
+              );
+            })}
+          </div>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: 12, padding: "1rem" }}>
           {filtered.map(p => {
@@ -586,8 +615,8 @@ export default function App() {
             return (
               <div key={p.id} style={{ background: "#fff", borderRadius: 10, border: "1px solid " + C.border, overflow: "hidden", display: "flex", flexDirection: "column" }}>
                 <div style={{ width: "100%", height: 130, background: cs.bg, overflow: "hidden", flexShrink: 0, position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  {p.image && <img src={p.image} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} onError={e => e.target.style.display = "none"} />}
-                  {!p.image && <span style={{ fontSize: 36 }}>{cs.icon}</span>}
+                  <span style={{ position: "absolute", fontSize: 36 }}>{cs.icon}</span>
+                  {p.image && <img src={p.image} alt={p.name} style={{ width: "100%", height: "100%", objectFit: "cover", position: "relative" }} onError={e => e.target.style.display = "none"} />}
                   {p.outOfStock && <div style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center" }}><span style={{ background: "#c00", color: "#fff", fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 20 }}>OUT OF STOCK</span></div>}
                 </div>
                 <div style={{ padding: "10px 12px 12px", flex: 1, display: "flex", flexDirection: "column" }}>
