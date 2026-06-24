@@ -21,7 +21,7 @@ const IMGS = {
   "Basil Holy":"https://i.ibb.co/cKystx61/Basil-Tulsi.jpg",
   "Basil Sweet":"https://i.ibb.co/QFr5BBXb/Basil-Sweet.jpg",
   "Bean Appaloosa Bush":"https://i.ibb.co/W4Cxq8g7/Bean-Appaloosa.jpg",
-  "Bean Black Turtle":"https://i.ibb.co/NnYBt93Z/Beans-Black.jpg",
+  "Bean Black Turtle":"https://i.ibb.co/1tRv8T0W/Beans-Black.jpg",
   "Beans Bird Egg Blue":"https://i.ibb.co/DfDNSByD/Beans-Bird-Egg-Blue.jpg",
   "Bean Lima Nuguni Pole Variety":"https://i.ibb.co/KzrTryvq/Beans-Nguni.jpg",
   "Bean Nonna Agnes Blue":"https://i.ibb.co/twm77Fg2/Bean-Nonna.jpg",
