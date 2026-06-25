@@ -336,9 +336,9 @@ export default function App() {
   const [cat, setCat] = useState("All");
   const [sort, setSort] = useState("default");
 
-  // Cart persisted to localStorage
-  const [cart, setCart] = useState(() => lsGet("tl_cart", []));
-  const saveCart = (newCart) => { setCart(newCart); lsSet("tl_cart", newCart); };
+  // Cart is session-only: starts empty on every page load so no stale/other order persists
+  const [cart, setCart] = useState([]);
+  const saveCart = (newCart) => { setCart(newCart); };
 
   const [editId, setEditId] = useState(null);
   const [editData, setEditData] = useState({});
@@ -359,6 +359,8 @@ export default function App() {
   const [expandedOrder, setExpandedOrder] = useState(null);
 
   useEffect(() => {
+    // Remove any cart left in storage by the previous version so no old order reappears
+    try { localStorage.removeItem("tl_cart"); } catch {}
     const p = new URLSearchParams(window.location.search);
     if (p.get("payment") === "success") { setPayStatus("success"); saveCart([]); }
     if (p.get("payment") === "cancelled") setPayStatus("cancelled");
