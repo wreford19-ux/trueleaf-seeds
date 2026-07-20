@@ -163,6 +163,7 @@ export default function App(){
   const [sortBy,setSortBy]=useState("featured");
   const [priceSearch,setPriceSearch]=useState("");
   const [priceDraft,setPriceDraft]=useState({});
+  const [syncing,setSyncing]=useState(false);
   const [prodCat,setProdCat]=useState("All");
   const [cart,setCart]=useState([]);
   const [editId,setEditId]=useState(null);
@@ -227,6 +228,23 @@ export default function App(){
 
   const handleAdminLogin=()=>{if(adminPw===ADMIN_PW){setAdminAuth(true);setAdminErr(false);setAuthPw(adminPw);loadOrders(adminPw);if(productsLoaded&&!blobsHadProducts){setBlobsHadProducts(true);fetch("/.netlify/functions/save-products",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:adminPw,products})}).catch(()=>{});}}else{setAdminErr(true);setAdminPw("");}};
 
+  const syncFromDistributor=async()=>{
+    if(!window.confirm("Sync the shop catalogue from the distributor app?\n\nNames, codes, categories and images will be updated to match the distributor.\nPrices you have set in the shop are kept. Products that no longer exist in the distributor list will be removed."))return;
+    setSyncing(true);
+    try{
+      const r=await fetch("/.netlify/functions/sync-catalogue",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:authPw})});
+      const d=await r.json();
+      if(d&&d.success){
+        const pr=await fetch("/.netlify/functions/get-products");
+        const pd=await pr.json();
+        if(pd&&Array.isArray(pd.products)&&pd.products.length)setProducts(pd.products);
+        showToast("Synced: "+d.total+" products ("+d.added+" added, "+d.updated+" updated, "+d.removed+" removed)");
+      }else{
+        showToast(d&&d.error?d.error:"Sync failed");
+      }
+    }catch(e){ showToast("Sync failed - please try again"); }
+    setSyncing(false);
+  };
   const openNewProduct=()=>{setIsNewProduct(true);setEditId("new");setEditData({...BLANK_PRODUCT});};
   const openEdit=p=>{setIsNewProduct(false);setEditId(p.id);setEditData({...p});};
 
@@ -487,6 +505,7 @@ export default function App(){
               <select style={{...iS,width:"auto"}} value={prodCat} onChange={e=>setProdCat(e.target.value)}>{CATS.map(c=><option key={c}>{c}</option>)}</select>
               <span style={{fontSize:12,color:C.textLight}}>{adminFiltered.length} products</span>
               <button style={{...bG,background:"#2d5a8e",padding:"9px 16px",fontSize:13}} onClick={openNewProduct}>+ Add new product</button>
+              <button style={{...bG,padding:"9px 16px",fontSize:13,opacity:syncing?0.6:1}} onClick={syncFromDistributor} disabled={syncing} title="Pull the latest catalogue from the distributor app">{syncing?"Syncing...":"\u21bb Sync from distributor"}</button>
             </div>
 
             {/* Product list */}
