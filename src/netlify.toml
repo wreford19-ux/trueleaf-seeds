@@ -1,0 +1,17 @@
+[build]
+  command = "react-scripts build"
+  publish = "build"
+  functions = "netlify/functions"
+
+[build.environment]
+  # CRA treats lint warnings as build-breaking errors when CI is true,
+  # which is Netlify's default. Unused variables should not fail a deploy.
+  CI = "false"
+  # Pin Node: react-scripts 5 is unreliable on very new Node versions,
+  # and Netlify's default keeps moving.
+  NODE_VERSION = "18"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
