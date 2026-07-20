@@ -11,6 +11,10 @@
   # and Netlify's default keeps moving.
   NODE_VERSION = "18"
 
+[functions]
+  # Bundle npm dependencies (notably @netlify/blobs) into each function.
+  node_bundler = "esbuild"
+
 [[redirects]]
   from = "/*"
   to = "/index.html"
