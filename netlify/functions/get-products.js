@@ -5,14 +5,23 @@
 
 const SITE_ID = "6270f33f-239c-496d-ba56-6a2e2e8767da";
 
+// Connect to Netlify Blobs.
+// Inside the Netlify runtime, getStore(name) configures itself — no token needed.
+// We only fall back to explicit credentials if that automatic path is unavailable.
+async function openStore(name) {
+  const { getStore } = await import("@netlify/blobs");
+  try {
+    return getStore(name);
+  } catch (e) {
+    console.log("Blobs auto-config unavailable, using explicit credentials:", e.message);
+    return getStore({ name, siteID: SITE_ID, token: process.env.NETLIFY_BLOBS_TOKEN });
+  }
+}
+
+
 exports.handler = async (event) => {
   try {
-    const { getStore } = await import("@netlify/blobs");
-    const store = getStore({
-      name:   "products",
-      siteID: SITE_ID,
-      token:  process.env.NETLIFY_BLOBS_TOKEN,
-    });
+    const store = await openStore("products");
 
     const data = await store.get("catalogue-v2", { type: "json" });
 
