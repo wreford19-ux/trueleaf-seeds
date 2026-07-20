@@ -160,6 +160,9 @@ export default function App(){
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("All");
   const [prodSearch,setProdSearch]=useState("");
+  const [sortBy,setSortBy]=useState("featured");
+  const [priceSearch,setPriceSearch]=useState("");
+  const [priceDraft,setPriceDraft]=useState({});
   const [prodCat,setProdCat]=useState("All");
   const [cart,setCart]=useState([]);
   const [editId,setEditId]=useState(null);
@@ -190,7 +193,7 @@ export default function App(){
   const saveProducts=(p,pw)=>{setProducts(p);const key=pw||authPw;fetch("/.netlify/functions/save-products",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:key,products:p})}).catch(()=>{});};
   const showToast=msg=>{setToast(msg);setTimeout(()=>setToast(""),2500);};
 
-  const storeFiltered=useMemo(()=>{const q=search.toLowerCase().trim();return products.filter(p=>(cat==="All"||p.category===cat)&&(q===""||p.name.toLowerCase().includes(q)||(p.code||"").toLowerCase().includes(q))&&p.stock);},[products,cat,search]);
+  const storeFiltered=useMemo(()=>{const q=search.toLowerCase().trim();const list=products.filter(p=>(cat==="All"||p.category===cat)&&(q===""||p.name.toLowerCase().includes(q)||(p.code||"").toLowerCase().includes(q))&&p.stock);if(sortBy==="az")list.sort((a,b)=>a.name.localeCompare(b.name));else if(sortBy==="za")list.sort((a,b)=>b.name.localeCompare(a.name));else if(sortBy==="plow")list.sort((a,b)=>a.price-b.price);else if(sortBy==="phigh")list.sort((a,b)=>b.price-a.price);return list;},[products,cat,search,sortBy]);
   const adminFiltered=useMemo(()=>{const q=prodSearch.toLowerCase().trim();return products.filter(p=>(prodCat==="All"||p.category===prodCat)&&(q===""||p.name.toLowerCase().includes(q)||(p.code||"").toLowerCase().includes(q)));},[products,prodCat,prodSearch]);
 
   const addCart=p=>{
@@ -244,6 +247,11 @@ export default function App(){
   const doDelete=()=>{saveProducts(products.filter(p=>p.id!==deleteConfirm));setDeleteConfirm(null);showToast("Product deleted");};
   const toggleOutOfStock=id=>saveProducts(products.map(p=>p.id===id?{...p,outOfStock:!p.outOfStock}:p));
   const toggleHide=id=>saveProducts(products.map(p=>p.id===id?{...p,stock:!p.stock}:p));
+  const priceList=useMemo(()=>{const q=priceSearch.toLowerCase().trim();if(q==="")return[];return products.filter(p=>p.name.toLowerCase().includes(q)||(p.code||"").toLowerCase().includes(q)).slice(0,60);},[products,priceSearch]);
+  const draftVal=(p,field)=>priceDraft[p.id]&&priceDraft[p.id][field]!==undefined?priceDraft[p.id][field]:p[field];
+  const setDraft=(id,field,val)=>setPriceDraft(d=>({...d,[id]:{...(d[id]||{}),[field]:val}}));
+  const draftCount=Object.keys(priceDraft).length;
+  const savePrices=()=>{if(!draftCount)return;const upd=products.map(p=>{const d=priceDraft[p.id];if(!d)return p;return{...p,cost:d.cost!==undefined&&d.cost!==""?Number(d.cost):p.cost,price:d.price!==undefined&&d.price!==""?Number(d.price):p.price};});saveProducts(upd);setPriceDraft({});showToast("Prices updated");};
   const applyBulk=()=>{if(!bulkPrice)return;saveProducts(products.map(p=>(bulkCat==="All"||p.category===bulkCat)?{...p,price:Number(bulkPrice)}:p));showToast("Bulk price applied!");setBulkPrice("");};
 
   const iS={width:"100%",padding:"9px 12px",borderRadius:6,border:"1px solid "+C.border,fontSize:13,boxSizing:"border-box",background:C.cream,fontFamily:"Georgia,serif",color:C.text};
@@ -259,7 +267,7 @@ export default function App(){
   if(payStatus==="success") return(
     <div style={{fontFamily:"Georgia,serif",minHeight:"100vh",background:C.offwhite,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{...bxS,textAlign:"center",maxWidth:480}}>
-        <img src={LOGO} alt="Trueleaf" style={{maxWidth:220,width:"80%",marginBottom:"1rem"}} onError={e=>e.target.style.display="none"}/>
+        <img src={LOGO} alt="Trueleaf" style={{maxWidth:220,width:"80%",marginBottom:"1rem",mixBlendMode:"multiply"}} onError={e=>e.target.style.display="none"}/>
         <div style={{fontSize:48,marginBottom:"0.5rem"}}>🌱</div>
         <h2 style={{color:C.darkGreen,margin:"0 0 0.5rem",fontSize:22}}>Thank you for your support!</h2>
         <p style={{color:C.textMid,fontSize:14,lineHeight:1.8,margin:"0 0 1rem"}}>Your payment was successful. We truly appreciate your support of heirloom seeds and sustainable growing in Africa.</p>
@@ -293,7 +301,7 @@ export default function App(){
 
       <nav style={{background:C.parchment,borderBottom:"2px solid "+C.border,padding:"0 1rem",display:"flex",alignItems:"center",gap:"0.5rem",minHeight:64,flexWrap:"wrap"}}>
         <div style={{flex:1,display:"flex",alignItems:"center",gap:10}}>
-          <img src={LOGO} alt="Trueleaf Seeds" style={{height:48,objectFit:"contain"}} onError={e=>e.target.style.display="none"}/>
+          <img src={LOGO} alt="Trueleaf Seeds" style={{height:48,objectFit:"contain",mixBlendMode:"multiply"}} onError={e=>e.target.style.display="none"}/>
           <div><p style={{margin:0,fontSize:16,fontWeight:700,color:C.darkGreen,letterSpacing:"0.5px",lineHeight:1.1}}>TRUELEAF</p><p style={{margin:0,fontSize:10,color:C.brown,letterSpacing:"2px",fontFamily:"system-ui,sans-serif"}}>SEED CO.</p></div>
         </div>
         <button style={{...bP,background:view==="store"?C.darkGreen:"transparent",color:view==="store"?"#fff":C.brown,border:"none",fontSize:13}} onClick={()=>setView("store")}>Shop</button>
@@ -305,7 +313,7 @@ export default function App(){
 
       {view==="store"&&<div>
         <div style={{background:C.parchment,borderBottom:"2px solid "+C.border,display:"flex",flexDirection:"column",alignItems:"center",padding:"1.5rem 1rem",textAlign:"center"}}>
-          <img src={LOGO} alt="Trueleaf Seeds Logo" style={{maxWidth:380,width:"85%",objectFit:"contain",marginBottom:"0.5rem"}} onError={e=>e.target.style.display="none"}/>
+          <img src={LOGO} alt="Trueleaf Seeds Logo" style={{maxWidth:380,width:"85%",objectFit:"contain",marginBottom:"0.5rem",mixBlendMode:"multiply"}} onError={e=>e.target.style.display="none"}/>
           <p style={{margin:0,fontSize:12,color:C.textLight,letterSpacing:"2px",fontFamily:"system-ui,sans-serif",textTransform:"uppercase"}}>Heirloom Seeds That Grow With You</p>
         </div>
         <div style={{background:"linear-gradient(160deg,"+C.darkGreen+" 0%,#3d6b28 100%)",color:"#fff",padding:"2.5rem 1.5rem",textAlign:"center"}}>
@@ -319,14 +327,31 @@ export default function App(){
           </div>
         </div>
         <div style={{background:C.parchment,borderBottom:"1px solid "+C.border,padding:"1rem",display:"flex",justifyContent:"center",gap:"2rem",flexWrap:"wrap"}}>
-          {[["1. Browse","270+ heirloom varieties"],["2. Checkout","Pay securely via YOCO"],["3. Pudo","Collect from your nearest locker"],["4. Grow","Save seeds year after year"]].map(([t,d])=>(
+          {[["1. Browse",products.length+" heirloom varieties"],["2. Checkout","Pay securely via YOCO"],["3. Pudo","Collect from your nearest locker"],["4. Grow","Save seeds year after year"]].map(([t,d])=>(
             <div key={t} style={{textAlign:"center",maxWidth:160}}><p style={{margin:0,fontWeight:700,fontSize:13,color:C.darkGreen}}>{t}</p><p style={{margin:"2px 0 0",fontSize:11,color:C.textMid}}>{d}</p></div>
           ))}
         </div>
-        <div style={{display:"flex",gap:8,padding:"0.75rem 1rem",flexWrap:"wrap",alignItems:"center",background:"#fff",borderBottom:"1px solid "+C.border}}>
-          <input style={{...iS,flex:1,minWidth:140}} placeholder="Search seeds..." value={search} onChange={e=>setSearch(e.target.value)}/>
-          <select style={{...iS,width:"auto"}} value={cat} onChange={e=>setCat(e.target.value)}>{CATS.map(c=><option key={c}>{c}</option>)}</select>
-          <span style={{fontSize:12,color:C.textLight}}>{storeFiltered.length} products</span>
+        <div style={{background:"#fff",borderBottom:"1px solid "+C.border,padding:"0.75rem 1rem"}}>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center",marginBottom:10}}>
+            <input style={{...iS,flex:1,minWidth:140}} placeholder="Search by name or code..." value={search} onChange={e=>setSearch(e.target.value)}/>
+            <select style={{...iS,width:"auto"}} value={sortBy} onChange={e=>setSortBy(e.target.value)}>
+              <option value="featured">Sort: Featured</option>
+              <option value="az">Name: A-Z</option>
+              <option value="za">Name: Z-A</option>
+              <option value="plow">Price: low to high</option>
+              <option value="phigh">Price: high to low</option>
+            </select>
+            <span style={{fontSize:12,color:C.textLight,whiteSpace:"nowrap"}}>{storeFiltered.length} products</span>
+          </div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {CATS.map(c=>{
+              const on=cat===c;
+              const icon=c==="All"?"\uD83C\uDF31":(CS[c]||{}).icon||"\uD83C\uDF3F";
+              return <button key={c} onClick={()=>setCat(c)} style={{border:"1px solid "+(on?C.darkGreen:C.border),background:on?C.darkGreen:"#fff",color:on?"#fff":C.brown,borderRadius:20,padding:"5px 13px",fontSize:12.5,fontWeight:on?700:500,cursor:"pointer",fontFamily:"Georgia,serif",display:"inline-flex",alignItems:"center",gap:5}}>
+                <span style={{fontSize:13}}>{icon}</span>{c}
+              </button>;
+            })}
+          </div>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:12,padding:"1rem"}}>
           {storeFiltered.map(p=>{
@@ -489,6 +514,36 @@ export default function App(){
           </div>}
 
           {adminTab==="bulk"&&<div>
+            <div style={{background:"#fff",border:"1px solid "+C.border,borderRadius:10,padding:"1.25rem",marginBottom:"1rem"}}>
+              <h3 style={{margin:"0 0 0.35rem",color:C.darkGreen,fontSize:15}}>Individual product pricing</h3>
+              <p style={{margin:"0 0 0.75rem",fontSize:12,color:C.textLight}}>Search for a product by name or code, then edit its cost and retail price.</p>
+              <input style={{...iS,marginBottom:10}} placeholder="Search by name or code, e.g. Cayenne or VTMM..." value={priceSearch} onChange={e=>setPriceSearch(e.target.value)}/>
+              {priceSearch.trim()!==""&&priceList.length===0&&<p style={{fontSize:12,color:C.textLight,margin:0}}>No products match that search.</p>}
+              {priceList.length>0&&<div style={{border:"1px solid "+C.border,borderRadius:8,overflow:"hidden"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",background:C.parchment,fontSize:11,fontWeight:700,color:C.brown,textTransform:"uppercase",letterSpacing:"0.5px"}}>
+                  <span style={{width:58}}>Code</span><span style={{flex:1}}>Product</span><span style={{width:78}}>Cost R</span><span style={{width:78}}>Price R</span><span style={{width:64,textAlign:"right"}}>Profit</span>
+                </div>
+                <div style={{maxHeight:340,overflowY:"auto"}}>
+                  {priceList.map(p=>{
+                    const c=Number(draftVal(p,"cost"))||0, pr=Number(draftVal(p,"price"))||0;
+                    const dirty=!!priceDraft[p.id];
+                    return(
+                      <div key={p.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 10px",borderTop:"1px solid "+C.border,background:dirty?"#fffbe8":"#fff"}}>
+                        <span style={{width:58,fontFamily:"ui-monospace,Menlo,monospace",fontSize:11,fontWeight:700,color:C.brown}}>{p.code}</span>
+                        <span style={{flex:1,fontSize:12.5,color:C.text,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                        <input style={{...iS,width:78,padding:"5px 7px",fontSize:12}} type="number" value={draftVal(p,"cost")} onChange={e=>setDraft(p.id,"cost",e.target.value)}/>
+                        <input style={{...iS,width:78,padding:"5px 7px",fontSize:12}} type="number" value={draftVal(p,"price")} onChange={e=>setDraft(p.id,"price",e.target.value)}/>
+                        <span style={{width:64,textAlign:"right",fontSize:12,fontWeight:700,color:pr-c>=0?C.midGreen:"#b00"}}>R{(pr-c).toFixed(0)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>}
+              {draftCount>0&&<div style={{display:"flex",alignItems:"center",gap:10,marginTop:10}}>
+                <button style={{...bG,padding:"9px 18px"}} onClick={savePrices}>Save {draftCount} change{draftCount!==1?"s":""}</button>
+                <button style={{...bP,padding:"9px 16px"}} onClick={()=>setPriceDraft({})}>Discard</button>
+              </div>}
+            </div>
             <div style={{background:C.parchment,border:"1px solid "+C.border,borderRadius:10,padding:"1.25rem",maxWidth:480}}>
               <h3 style={{margin:"0 0 1rem",color:C.darkGreen,fontSize:15}}>Bulk price update</h3>
               <label style={{fontSize:12,color:C.textMid,display:"block",marginBottom:4}}>Category</label>
