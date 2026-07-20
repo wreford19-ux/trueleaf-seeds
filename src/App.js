@@ -285,8 +285,8 @@ export default function App(){
       <div style={{...bxS,textAlign:"center",maxWidth:440}}>
         <div style={{fontSize:48,marginBottom:"0.5rem"}}>🌿</div>
         <h2 style={{color:C.darkGreen,margin:"0 0 0.5rem"}}>Payment cancelled</h2>
-        <p style={{color:C.textMid,fontSize:14,lineHeight:1.7,margin:"0 0 1rem"}}>No worries — your cart is still waiting. Come back anytime!</p>
-        <button style={{...bG,width:"100%",padding:12}} onClick={()=>{window.history.replaceState({},"","/");setPayStatus(null);}}>Back to store</button>
+        <p style={{color:C.textMid,fontSize:14,lineHeight:1.7,margin:"0 0 1rem"}}>No payment was taken, so nothing has been charged. Your basket has been cleared for your security — please add your seeds again when you're ready to order.</p>
+        <button style={{...bG,width:"100%",padding:12}} onClick={()=>{window.history.replaceState({},"","/");setPayStatus(null);setCart([]);}}>Start a new basket</button>
       </div>
     </div>
   );
@@ -642,7 +642,7 @@ export default function App(){
                 <h3 style={{margin:0,color:C.darkGreen}}>Your cart</h3>
                 <button style={{background:"none",border:"none",fontSize:22,cursor:"pointer",color:C.textLight}} onClick={closeCart}>✕</button>
               </div>
-              {cart.length===0?<p style={{color:C.textLight,textAlign:"center",padding:"2rem 0"}}>Your cart is empty</p>:(
+              {cart.length===0?<p style={{color:C.textLight,textAlign:"center",padding:"2rem 0",lineHeight:1.7}}>Your basket is empty.<br/><span style={{fontSize:12}}>Baskets are cleared after checkout or when you leave the site, so your order is always just yours.</span></p>:(
                 <div>
                   {cart.map(x=>(
                     <div key={x.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 0",borderBottom:"1px solid "+C.border}}>
