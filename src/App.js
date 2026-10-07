@@ -8,7 +8,8 @@ const ADMIN_PW = "Wreford99#";
 const PUDO_FEE = 50;
 const PACKAGING_FEE = 15;
 
-const ALL_CATS = ["Capsicums","Crop Cover & Lawns","Flowers","Fruit","Gourds","Herbs","Microgreens","Peanuts","Sprouts","Trees","Vegetables"];
+const SEED_ALL_CATS = ["Capsicums","Crop Cover & Lawns","Flowers","Fruit","Gourds","Herbs","Microgreens","Peanuts","Sprouts","Trees","Vegetables"];
+const tintBg = (hex)=>{ try{ const h=hex.replace("#",""); const r=parseInt(h.slice(0,2),16), g=parseInt(h.slice(2,4),16), b=parseInt(h.slice(4,6),16); const m=(x)=>Math.round(x+(255-x)*0.88); return "rgb("+m(r)+","+m(g)+","+m(b)+")"; }catch(e){ return "#f0f0f0"; } };
 
 
 const RAW=[
@@ -140,7 +141,7 @@ const RAW=[
 
 const INIT=RAW.map((r,i)=>({id:i+1,code:r[0],name:r[1],category:r[2],image:r[3],cost:25,price:45,stock:true,outOfStock:false}));
 const CATS=["All",...Array.from(new Set(INIT.map(p=>p.category))).sort()];
-const CS={Vegetables:{bg:"#e8f5ee",color:"#2d6a3f",icon:"🥦"},Flowers:{bg:"#fdf0f8",color:"#8b3a72",icon:"🌸"},Herbs:{bg:"#fdf8e8",color:"#7a5c00",icon:"🌿"},Trees:{bg:"#eef5e8",color:"#2d4a1e",icon:"🌳"},Microgreens:{bg:"#e8f8f8",color:"#0a6060",icon:"🌱"},Sprouts:{bg:"#e8eef8",color:"#1a3a7a",icon:"🫘"},"Crop Cover & Lawns":{bg:"#f5efe8",color:"#6b3a00",icon:"🌾"},Capsicums:{bg:"#fdeaea",color:"#a32020",icon:"🌶️"},Fruit:{bg:"#fdf1e3",color:"#9a5000",icon:"🍎"},Gourds:{bg:"#f3f0e2",color:"#6a5a10",icon:"🎃"},Peanuts:{bg:"#f4ece2",color:"#6b4423",icon:"🥜"}};
+const SEED_CS={Vegetables:{bg:"#e8f5ee",color:"#2d6a3f",icon:"🥦"},Flowers:{bg:"#fdf0f8",color:"#8b3a72",icon:"🌸"},Herbs:{bg:"#fdf8e8",color:"#7a5c00",icon:"🌿"},Trees:{bg:"#eef5e8",color:"#2d4a1e",icon:"🌳"},Microgreens:{bg:"#e8f8f8",color:"#0a6060",icon:"🌱"},Sprouts:{bg:"#e8eef8",color:"#1a3a7a",icon:"🫘"},"Crop Cover & Lawns":{bg:"#f5efe8",color:"#6b3a00",icon:"🌾"},Capsicums:{bg:"#fdeaea",color:"#a32020",icon:"🌶️"},Fruit:{bg:"#fdf1e3",color:"#9a5000",icon:"🍎"},Gourds:{bg:"#f3f0e2",color:"#6a5a10",icon:"🎃"},Peanuts:{bg:"#f4ece2",color:"#6b4423",icon:"🥜"}};
 const C={darkGreen:"#2d4a1e",midGreen:"#3d6b28",parchment:"#f5edd8",parchmentDark:"#e8d5a3",brown:"#5c3d1e",cream:"#faf7f0",offwhite:"#f7f4ec",border:"#ddd5b8",text:"#2a2015",textMid:"#5c4a2a",textLight:"#8a7a5a"};
 const SC={Pending:{bg:"#fff3cd",color:"#856404",border:"#ffc107"},Packed:{bg:"#cfe2ff",color:"#084298",border:"#0d6efd"},Dispatched:{bg:"#d1ecf1",color:"#0c5460",border:"#17a2b8"},Delivered:{bg:"#d4edda",color:"#155724",border:"#28a745"}};
 
@@ -157,6 +158,9 @@ export default function App(){
   const [authPw,setAuthPw]=useState("");
   const [blobsHadProducts,setBlobsHadProducts]=useState(false);
   const [productsLoaded,setProductsLoaded]=useState(false);
+  const [cats,setCats]=useState(null);
+  const ALL_CATS=useMemo(()=>(cats&&cats.length)?cats.map(c=>c.name):SEED_ALL_CATS,[cats]);
+  const CS=useMemo(()=>{ if(!cats||!cats.length) return SEED_CS; const m={...SEED_CS}; cats.forEach(c=>{ if(c&&c.name) m[c.name]={bg:(SEED_CS[c.name]?SEED_CS[c.name].bg:tintBg(c.color)), color:c.color, icon:c.icon}; }); return m; },[cats]);
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("All");
   const [prodSearch,setProdSearch]=useState("");
@@ -186,7 +190,7 @@ export default function App(){
     const p=new URLSearchParams(window.location.search);
     if(p.get("payment")==="success") setPayStatus("success");
     if(p.get("payment")==="cancelled") setPayStatus("cancelled");
-    (async()=>{try{const r=await fetch("/.netlify/functions/get-products");const d=await r.json();if(d&&Array.isArray(d.products)&&d.products.length){setProducts(d.products);setBlobsHadProducts(true);}}catch{}finally{setProductsLoaded(true);}})();
+    (async()=>{try{const r=await fetch("/.netlify/functions/get-products");const d=await r.json();if(d&&Array.isArray(d.products)&&d.products.length){setProducts(d.products);setBlobsHadProducts(true);}if(d&&Array.isArray(d.categories)&&d.categories.length)setCats(d.categories);}catch{}finally{setProductsLoaded(true);}})();
   },[]);
 
   const loadOrders=async(pw)=>{try{const r=await fetch("/.netlify/functions/get-orders",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:pw})});const d=await r.json();if(Array.isArray(d.orders))setOrders(d.orders);}catch{}};
@@ -237,8 +241,8 @@ export default function App(){
       if(d&&d.success){
         const pr=await fetch("/.netlify/functions/get-products");
         const pd=await pr.json();
-        if(pd&&Array.isArray(pd.products)&&pd.products.length)setProducts(pd.products);
-        showToast("Synced: "+d.total+" products ("+d.added+" added, "+d.updated+" updated, "+d.removed+" removed)");
+        if(pd&&Array.isArray(pd.products)&&pd.products.length)setProducts(pd.products);if(pd&&Array.isArray(pd.categories)&&pd.categories.length)setCats(pd.categories);
+        showToast("Synced: "+d.total+" products ("+d.added+" added, "+d.updated+" updated, "+d.removed+" removed)"+(d.categories?", "+d.categories+" categories":""));
       }else{
         showToast(d&&d.error?d.error:"Sync failed");
       }
