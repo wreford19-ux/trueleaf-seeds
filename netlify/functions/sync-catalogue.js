@@ -74,6 +74,7 @@ exports.handler = async (event) => {
 
     const doc = await res.json();
     const items = unwrap((doc.fields || {}).items) || [];
+    const cats = unwrap((doc.fields || {}).cats);  // [{name, icon, color}] or null
     if (!Array.isArray(items) || items.length === 0) {
       return { statusCode: 200, body: JSON.stringify({ error: "The distributor catalogue came back empty — nothing was changed." }) };
     }
@@ -124,6 +125,8 @@ exports.handler = async (event) => {
 
     // ── 4. Save ─────────────────────────────────────────────────────────────
     await store.setJSON("catalogue-v2", merged);
+    let catCount = null;
+    if (Array.isArray(cats) && cats.length) { await store.setJSON("categories-v1", cats); catCount = cats.length; }
 
     return {
       statusCode: 200,
@@ -134,6 +137,7 @@ exports.handler = async (event) => {
         added,
         updated,
         removed: removed.length,
+        categories: catCount,
         removedNames: removed.slice(0, 20).map(p => p.name),
       }),
     };

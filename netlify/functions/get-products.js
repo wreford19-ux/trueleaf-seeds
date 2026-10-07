@@ -24,11 +24,12 @@ exports.handler = async (event) => {
     const store = await openStore("products");
 
     const data = await store.get("catalogue-v2", { type: "json" });
+    const catsData = await store.get("categories-v1", { type: "json" });
 
     return {
       statusCode: 200,
       headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" },
-      body: JSON.stringify({ products: Array.isArray(data) ? data : null }),
+      body: JSON.stringify({ products: Array.isArray(data) ? data : null, categories: Array.isArray(catsData) ? catsData : null }),
     };
   } catch (err) {
     console.error("get-products error:", err.message);
